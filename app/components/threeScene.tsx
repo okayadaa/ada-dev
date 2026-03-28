@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 
 import { createClouds } from "@/lib/clouds";
@@ -9,8 +9,27 @@ import { createLogos, animateLogos } from "@/lib/createLogos";
 
 type InputState = { mouseX: number; mouseY: number };
 
+type ScreenConfig = {
+  isMobile: boolean;
+  isTablet: boolean;
+  cameraZ: number;
+  cameraY: number;
+  lookAtY: number;
+  starCount: number;
+  flowerCount: number;
+  flowerSpacing: number;
+  grassCount: number;
+  grassWidth: number;
+  grassDepth: number;
+  swayXStrength: number;
+  swayYStrength: number;
+  inputDamping: number;
+  sceneHeight: string;
+};
+
 export default function ThreeScene() {
   const mountRef = useRef<HTMLDivElement | null>(null);
+  const [sceneHeight, setSceneHeight] = useState("100vh");
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -36,13 +55,44 @@ export default function ThreeScene() {
 
     let raf = 0;
 
+    function getScreenConfig(): ScreenConfig {
+      const width = window.innerWidth;
+      const isMobile = width < 640;
+      const isTablet = width >= 640 && width < 1024;
+
+      return {
+        isMobile,
+        isTablet,
+        cameraZ: isMobile ? 26 : isTablet ? 22 : 18,
+        cameraY: isMobile ? 10 : isTablet ? 9 : 8,
+        lookAtY: isMobile ? 8 : isTablet ? 7.2 : 6.5,
+        starCount: isMobile ? 250 : isTablet ? 500 : 1000,
+        flowerCount: isMobile ? 60 : isTablet ? 100 : 175,
+        flowerSpacing: isMobile ? 5 : isTablet ? 5.5 : 6,
+        grassCount: isMobile ? 1800 : isTablet ? 3500 : 7700,
+        grassWidth: isMobile ? 55 : isTablet ? 65 : 80,
+        grassDepth: isMobile ? 45 : isTablet ? 55 : 69,
+        swayXStrength: isMobile ? 2.5 : isTablet ? 4 : 7,
+        swayYStrength: isMobile ? 2 : isTablet ? 3.5 : 5,
+        inputDamping: isMobile ? 0.5 : isTablet ? 0.75 : 1,
+        sceneHeight: isMobile ? "75vh" : isTablet ? "85vh" : "100vh",
+      };
+    }
+
+    function updateSceneHeight() {
+      const config = getScreenConfig();
+      setSceneHeight(config.sceneHeight);
+    }
+
     function onPointerMove(e: PointerEvent) {
       const rect = mountNode.getBoundingClientRect();
       const x = (e.clientX - rect.left) / rect.width;
       const y = (e.clientY - rect.top) / rect.height;
 
-      inputState.mouseX = (x - 0.5) * 2;
-      inputState.mouseY = (0.5 - y) * 2;
+      const config = getScreenConfig();
+
+      inputState.mouseX = ((x - 0.5) * 2) * config.inputDamping;
+      inputState.mouseY = ((0.5 - y) * 2) * config.inputDamping;
 
       mouse.x = x * 2 - 1;
       mouse.y = -(y * 2 - 1);
@@ -238,6 +288,8 @@ export default function ThreeScene() {
     function init() {
       scene = new THREE.Scene();
 
+      const config = getScreenConfig();
+
       loader.load("/images/sunsetPrototype.png", (texture) => {
         texture.minFilter = THREE.LinearFilter;
         texture.magFilter = THREE.LinearFilter;
@@ -257,8 +309,8 @@ export default function ThreeScene() {
         0.1,
         200
       );
-      camera.position.set(0, 8, 18);
-      camera.lookAt(0, 6.5, 0);
+      camera.position.set(0, config.cameraY, config.cameraZ);
+      camera.lookAt(0, config.lookAtY, 0);
 
       const ambient = new THREE.AmbientLight(0xffffff, 0.7);
       scene.add(ambient);
@@ -277,14 +329,14 @@ export default function ThreeScene() {
       ground.receiveShadow = true;
       scene.add(ground);
 
-      stars = createStars(scene, 1000);
+      stars = createStars(scene, config.starCount);
       logos = createLogos(scene);
 
       const rand = mulberry32(12345);
       petals = [];
 
-      const flowerCount = 175;
-      const spacing = 6;
+      const flowerCount = config.flowerCount;
+      const spacing = config.flowerSpacing;
       const gridSize = Math.ceil(Math.sqrt(flowerCount));
 
       for (let i = 0; i < flowerCount; i++) {
@@ -295,7 +347,9 @@ export default function ThreeScene() {
           gridX * spacing - (gridSize * spacing) / 2 + (rand() - 0.6) * 1.2;
         const z =
           gridZ * spacing - (gridSize * spacing) / 2 + (rand() - 0.6) * 1.2;
-        const scale = 0.8 + rand() * 0.7;
+
+        const baseScale = config.isMobile ? 0.75 : config.isTablet ? 0.85 : 1;
+        const scale = baseScale * (0.8 + rand() * 0.7);
         const petalCount = 18 + Math.floor(rand() * 6);
 
         const flower = createFlower({
@@ -313,7 +367,11 @@ export default function ThreeScene() {
         scene.add(flower);
       }
 
-      createGrassBand();
+      createGrassBand({
+        count: config.grassCount,
+        width: config.grassWidth,
+        depth: config.grassDepth,
+      });
 
       const cloudTextures: THREE.Texture[] = [];
       let texturesLoaded = 0;
@@ -342,21 +400,28 @@ export default function ThreeScene() {
 
       const width = mountNode.clientWidth;
       const height = mountNode.clientHeight;
+      const config = getScreenConfig();
 
       camera.aspect = width / height;
+      camera.position.set(0, config.cameraY, config.cameraZ);
+      camera.lookAt(0, config.lookAtY, 0);
       camera.updateProjectionMatrix();
 
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       renderer.setSize(width, height);
+
+      updateSceneHeight();
     }
 
     function animate() {
       raf = requestAnimationFrame(animate);
 
-      const swayX = inputState.mouseX * 7;
-      const swayY = 7.5 + inputState.mouseY * 5;
+      const config = getScreenConfig();
 
-      camera.position.set(0, 8, 18);
+      const swayX = inputState.mouseX * config.swayXStrength;
+      const swayY = config.lookAtY + inputState.mouseY * config.swayYStrength;
+
+      camera.position.set(0, config.cameraY, config.cameraZ);
       camera.lookAt(swayX, swayY, 0);
 
       timer.update();
@@ -409,6 +474,7 @@ export default function ThreeScene() {
       renderer.render(scene, camera);
     }
 
+    updateSceneHeight();
     init();
     window.addEventListener("resize", onResize);
     animate();
@@ -441,5 +507,14 @@ export default function ThreeScene() {
     };
   }, []);
 
-  return <div ref={mountRef} style={{ width: "100%", height: "100vh" }} />;
+  return (
+    <div
+      ref={mountRef}
+      style={{
+        width: "100%",
+        height: sceneHeight,
+        minHeight: "500px",
+      }}
+    />
+  );
 }
