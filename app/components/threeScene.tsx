@@ -63,19 +63,27 @@ export default function ThreeScene() {
       return {
         isMobile,
         isTablet,
-        cameraZ: isMobile ? 26 : isTablet ? 22 : 18,
-        cameraY: isMobile ? 10 : isTablet ? 9 : 8,
-        lookAtY: isMobile ? 8 : isTablet ? 7.2 : 6.5,
-        starCount: isMobile ? 250 : isTablet ? 500 : 1000,
-        flowerCount: isMobile ? 60 : isTablet ? 100 : 175,
-        flowerSpacing: isMobile ? 5 : isTablet ? 5.5 : 6,
-        grassCount: isMobile ? 1800 : isTablet ? 3500 : 7700,
-        grassWidth: isMobile ? 55 : isTablet ? 65 : 80,
-        grassDepth: isMobile ? 45 : isTablet ? 55 : 69,
-        swayXStrength: isMobile ? 2.5 : isTablet ? 4 : 7,
-        swayYStrength: isMobile ? 2 : isTablet ? 3.5 : 5,
-        inputDamping: isMobile ? 0.5 : isTablet ? 0.75 : 1,
-        sceneHeight: isMobile ? "75vh" : isTablet ? "85vh" : "100vh",
+
+        // Desktop unchanged
+        cameraZ: isMobile ? 19.5 : isTablet ? 18.8 : 18,
+        cameraY: isMobile ? 8.4 : isTablet ? 8.2 : 8,
+        lookAtY: isMobile ? 7.1 : isTablet ? 6.8 : 6.5,
+
+        // Desktop unchanged, mobile/tablet closer to desktop
+        starCount: isMobile ? 700 : isTablet ? 850 : 1000,
+        flowerCount: isMobile ? 145 : isTablet ? 160 : 175,
+        flowerSpacing: isMobile ? 5.8 : isTablet ? 5.9 : 6,
+        grassCount: isMobile ? 5200 : isTablet ? 6200 : 7700,
+        grassWidth: isMobile ? 74 : isTablet ? 77 : 80,
+        grassDepth: isMobile ? 64 : isTablet ? 66 : 69,
+
+        // Stronger touch/mobile response
+        swayXStrength: isMobile ? 6.2 : isTablet ? 6.5 : 7,
+        swayYStrength: isMobile ? 4.4 : isTablet ? 4.7 : 5,
+        inputDamping: isMobile ? 1.35 : isTablet ? 1.1 : 1,
+
+        // Desktop unchanged
+        sceneHeight: isMobile ? "100svh" : isTablet ? "100vh" : "100vh",
       };
     }
 
@@ -90,9 +98,10 @@ export default function ThreeScene() {
       const y = (e.clientY - rect.top) / rect.height;
 
       const config = getScreenConfig();
+      const boost = config.isMobile ? 1.35 : config.isTablet ? 1.1 : 1;
 
-      inputState.mouseX = ((x - 0.5) * 2) * config.inputDamping;
-      inputState.mouseY = ((0.5 - y) * 2) * config.inputDamping;
+      inputState.mouseX = (x - 0.5) * 2 * config.inputDamping * boost;
+      inputState.mouseY = (0.5 - y) * 2 * config.inputDamping * boost;
 
       mouse.x = x * 2 - 1;
       mouse.y = -(y * 2 - 1);
@@ -348,7 +357,7 @@ export default function ThreeScene() {
         const z =
           gridZ * spacing - (gridSize * spacing) / 2 + (rand() - 0.6) * 1.2;
 
-        const baseScale = config.isMobile ? 0.75 : config.isTablet ? 0.85 : 1;
+        const baseScale = config.isMobile ? 0.9 : config.isTablet ? 0.95 : 1;
         const scale = baseScale * (0.8 + rand() * 0.7);
         const petalCount = 18 + Math.floor(rand() * 6);
 
@@ -513,7 +522,8 @@ export default function ThreeScene() {
       style={{
         width: "100%",
         height: sceneHeight,
-        minHeight: "500px",
+        minHeight: "100svh",
+        touchAction: "none",
       }}
     />
   );
