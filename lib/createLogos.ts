@@ -1,5 +1,9 @@
 import * as THREE from "three";
 
+import { SITE_LINKS, type SiteLinkKey } from "@/lib/siteLinks";
+
+const LOGO_SIZE = 1.9;
+
 export function createLogos(scene: THREE.Scene): THREE.Mesh[] {
   const loader = new THREE.TextureLoader();
 
@@ -15,7 +19,8 @@ export function createLogos(scene: THREE.Scene): THREE.Mesh[] {
     const texture = loader.load(path);
     texture.colorSpace = THREE.SRGBColorSpace;
 
-    // glow copy behind the logo
+    const link = SITE_LINKS[name as SiteLinkKey];
+
     const glowMaterial = new THREE.MeshBasicMaterial({
       map: texture,
       transparent: true,
@@ -26,12 +31,11 @@ export function createLogos(scene: THREE.Scene): THREE.Mesh[] {
     });
 
     const glow = new THREE.Mesh(
-      new THREE.PlaneGeometry(1.9, 1.9),
+      new THREE.PlaneGeometry(LOGO_SIZE, LOGO_SIZE),
       glowMaterial
     );
     glow.position.set(x, y, -1.01);
 
-    // real logo in front
     const logoMaterial = new THREE.MeshBasicMaterial({
       map: texture,
       transparent: true,
@@ -41,13 +45,14 @@ export function createLogos(scene: THREE.Scene): THREE.Mesh[] {
     });
 
     const logo = new THREE.Mesh(
-      new THREE.PlaneGeometry(1.9, 1.9),
+      new THREE.PlaneGeometry(LOGO_SIZE, LOGO_SIZE),
       logoMaterial
     );
     logo.position.set(x, y, -1);
 
     logo.userData = {
       name,
+      link,
       glow,
       hovered: false,
       baseX: x,
@@ -65,10 +70,11 @@ export function createLogos(scene: THREE.Scene): THREE.Mesh[] {
 
 export function animateLogos(
   logos: THREE.Mesh[],
+  camera: THREE.Camera,
   timer: THREE.Timer
 ) {
   const time = timer.getElapsed();
-  const wave = Math.sin(time * 1.5); // same timing as stars
+  const wave = Math.sin(time * 1.5);
 
   logos.forEach((logo) => {
     const glow = logo.userData.glow as THREE.Mesh;
@@ -80,7 +86,9 @@ export function animateLogos(
     logo.position.set(baseX, baseY, baseZ);
     glow.position.set(baseX, baseY, baseZ - 0.01);
 
-    // logo zoom in / out like the stars
+    logo.lookAt(camera.position);
+    glow.lookAt(camera.position);
+
     const logoZoom = hovered ? 1.12 + 0.10 * wave : 1.0 + 0.19 * wave;
     logo.scale.set(logoZoom, logoZoom, 1);
 
@@ -92,7 +100,6 @@ export function animateLogos(
     const brightness = hovered ? 1.18 : 1.0 + 0.04 * wave;
     logoMaterial.color.setRGB(brightness, brightness, brightness);
 
-    // glow follows the same zoom pattern, slightly larger
     const glowZoom = hovered ? 1.28 + 0.14 * wave : 1.15 + 0.14 * wave;
     glow.scale.set(glowZoom, glowZoom, 1);
 
@@ -101,4 +108,19 @@ export function animateLogos(
       ? THREE.MathUtils.clamp(0.3 + 0.07 * wave, 0.2, 0.4)
       : THREE.MathUtils.clamp(0.16 + 0.05 * wave, 0.08, 0.24);
   });
+}
+
+export function getLogoScreenSize(
+  logo: THREE.Mesh,
+  camera: THREE.PerspectiveCamera,
+  viewportHeight: number
+): number {
+  const worldPos = new THREE.Vector3();
+  logo.getWorldPosition(worldPos);
+  const distance = camera.position.distanceTo(worldPos);
+  const screenHeightWorld =
+    2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * distance;
+  const scale = logo.scale.x;
+  const sizePx = ((LOGO_SIZE * scale) / screenHeightWorld) * viewportHeight;
+  return Math.max(72, sizePx * 1.5);
 }

@@ -5,7 +5,16 @@ import * as THREE from "three";
 
 import { createClouds } from "@/lib/clouds";
 import { createStars, animateStars } from "@/lib/stars";
-import { createLogos, animateLogos } from "@/lib/createLogos";
+import { createLogos, animateLogos, getLogoScreenSize } from "@/lib/createLogos";
+import { SITE_LINKS, type SiteLinkKey } from "@/lib/siteLinks";
+import {
+  createSky,
+  createSkyState,
+  getSkyState,
+  getCurrentHour,
+  applySkyToUniforms,
+  type Sky,
+} from "@/lib/timeOfDay";
 
 type InputState = { mouseX: number; mouseY: number };
 
@@ -28,12 +37,24 @@ type ScreenConfig = {
 };
 
 export default function ThreeScene() {
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const mountRef = useRef<HTMLDivElement | null>(null);
+  const linkRefs = useRef<Partial<Record<SiteLinkKey, HTMLAnchorElement | null>>>({});
+  const logosRef = useRef<THREE.Mesh[]>([]);
   const [sceneHeight, setSceneHeight] = useState("100vh");
 
+  const logoKeys: SiteLinkKey[] = ["home", "github", "linkedin"];
+
+  function setLogoHovered(key: SiteLinkKey, hovered: boolean) {
+    const logo = logosRef.current.find((mesh) => mesh.userData.name === key);
+    if (logo) logo.userData.hovered = hovered;
+  }
+
   useEffect(() => {
+    const container = containerRef.current;
     const mount = mountRef.current;
-    if (!mount) return;
+    if (!container || !mount) return;
+    const containerNode: HTMLDivElement = container;
     const mountNode: HTMLDivElement = mount;
 
     const inputState: InputState = { mouseX: 0, mouseY: 0 };
@@ -47,8 +68,24 @@ export default function ThreeScene() {
     let stars: THREE.Points | null = null;
     let logos: THREE.Mesh[] = [];
 
-    const raycaster = new THREE.Raycaster();
+    let ambient!: THREE.AmbientLight;
+    let dirLight!: THREE.DirectionalLight;
+    let sky: Sky | null = null;
+    const skyState = createSkyState();
+
+    // Dev preview: visit "?hour=1" (or any 0–24 value) to lock the sky to a
+    // specific time of day. With no param it follows the visitor's real clock.
+    function resolveHour(): number {
+      const param = new URLSearchParams(window.location.search).get("hour");
+      if (param !== null) {
+        const n = parseFloat(param);
+        if (!Number.isNaN(n)) return n;
+      }
+      return getCurrentHour();
+    }
+
     const mouse = new THREE.Vector2();
+    const projected = new THREE.Vector3();
     const grassBlades: THREE.Mesh[] = [];
     const loader = new THREE.TextureLoader();
     const timer = new THREE.Timer();
@@ -92,19 +129,65 @@ export default function ThreeScene() {
       setSceneHeight(config.sceneHeight);
     }
 
-    function onPointerMove(e: PointerEvent) {
-      const rect = mountNode.getBoundingClientRect();
+
+    function updatePointerCoords(e: { clientX: number; clientY: number }) {
+      const rect = containerNode.getBoundingClientRect();
       const x = (e.clientX - rect.left) / rect.width;
       const y = (e.clientY - rect.top) / rect.height;
 
+      mouse.x = x * 2 - 1;
+      mouse.y = -(y * 2 - 1);
+
+      return { x, y };
+    }
+
+    function syncInputAndCamera(x: number, y: number) {
       const config = getScreenConfig();
       const boost = config.isMobile ? 1.35 : config.isTablet ? 1.1 : 1;
 
       inputState.mouseX = (x - 0.5) * 2 * config.inputDamping * boost;
       inputState.mouseY = (0.5 - y) * 2 * config.inputDamping * boost;
 
-      mouse.x = x * 2 - 1;
-      mouse.y = -(y * 2 - 1);
+      const swayX = inputState.mouseX * config.swayXStrength;
+      const swayY = config.lookAtY + inputState.mouseY * config.swayYStrength;
+
+      camera.position.set(0, config.cameraY, config.cameraZ);
+      camera.lookAt(swayX, swayY, 0);
+      camera.updateMatrixWorld();
+    }
+
+    function onPointerMove(e: PointerEvent) {
+      const { x, y } = updatePointerCoords(e);
+      syncInputAndCamera(x, y);
+    }
+
+    function updateLogoOverlays() {
+      if (!logos.length) return;
+
+      scene.updateMatrixWorld(true);
+      camera.updateMatrixWorld(true);
+
+      const width = containerNode.clientWidth;
+      const height = containerNode.clientHeight;
+
+      logos.forEach((logo) => {
+        const key = logo.userData.name as SiteLinkKey;
+        const anchor = linkRefs.current[key];
+        if (!anchor) return;
+
+        logo.getWorldPosition(projected);
+        projected.project(camera);
+
+        const x = (projected.x * 0.5 + 0.5) * width;
+        const y = (-projected.y * 0.5 + 0.5) * height;
+        const size = getLogoScreenSize(logo, camera, height);
+
+        anchor.style.visibility = "visible";
+        anchor.style.left = `${x}px`;
+        anchor.style.top = `${y}px`;
+        anchor.style.width = `${size}px`;
+        anchor.style.height = `${size}px`;
+      });
     }
 
     function createLeaf(scale = 1) {
@@ -299,32 +382,38 @@ export default function ThreeScene() {
 
       const config = getScreenConfig();
 
-      loader.load("/images/sunsetPrototype.png", (texture) => {
-        texture.minFilter = THREE.LinearFilter;
-        texture.magFilter = THREE.LinearFilter;
-        scene.background = texture;
-      });
+      getSkyState(resolveHour(), skyState);
+      sky = createSky(scene, skyState);
 
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       renderer.setClearColor(0x000000, 0);
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-      renderer.setSize(mountNode.clientWidth, mountNode.clientHeight);
+      renderer.setSize(containerNode.clientWidth, containerNode.clientHeight);
       renderer.domElement.id = "bg-canvas";
+      Object.assign(renderer.domElement.style, {
+        display: "block",
+        position: "absolute",
+        inset: "0",
+        width: "100%",
+        height: "100%",
+        pointerEvents: "none",
+      });
       mountNode.appendChild(renderer.domElement);
 
       camera = new THREE.PerspectiveCamera(
         75,
-        mountNode.clientWidth / mountNode.clientHeight,
+        containerNode.clientWidth / containerNode.clientHeight,
         0.1,
         200
       );
       camera.position.set(0, config.cameraY, config.cameraZ);
       camera.lookAt(0, config.lookAtY, 0);
 
-      const ambient = new THREE.AmbientLight(0xffffff, 0.7);
+      ambient = new THREE.AmbientLight(0xffffff, skyState.ambient);
       scene.add(ambient);
 
-      const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      dirLight = new THREE.DirectionalLight(0xffffff, skyState.dirIntensity);
+      dirLight.color.copy(skyState.dirColor);
       dirLight.position.set(5, 10, 7.5);
       dirLight.castShadow = true;
       scene.add(dirLight);
@@ -340,6 +429,7 @@ export default function ThreeScene() {
 
       stars = createStars(scene, config.starCount);
       logos = createLogos(scene);
+      logosRef.current = logos;
 
       const rand = mulberry32(12345);
       petals = [];
@@ -401,14 +491,14 @@ export default function ThreeScene() {
         }
       });
 
-      mountNode.addEventListener("pointermove", onPointerMove);
+      containerNode.addEventListener("pointermove", onPointerMove);
     }
 
     function onResize() {
       if (!camera || !renderer) return;
 
-      const width = mountNode.clientWidth;
-      const height = mountNode.clientHeight;
+      const width = containerNode.clientWidth;
+      const height = containerNode.clientHeight;
       const config = getScreenConfig();
 
       camera.aspect = width / height;
@@ -436,8 +526,20 @@ export default function ThreeScene() {
       timer.update();
       const time = timer.getElapsed();
 
+      getSkyState(resolveHour(), skyState);
+      if (sky) applySkyToUniforms(sky, skyState);
+      if (ambient) ambient.intensity = skyState.ambient;
+      if (dirLight) {
+        dirLight.intensity = skyState.dirIntensity;
+        dirLight.color.copy(skyState.dirColor);
+      }
+      if (stars) {
+        (stars.material as THREE.PointsMaterial).opacity = skyState.starOpacity;
+        stars.visible = skyState.starOpacity > 0.001;
+      }
+
       if (stars) animateStars(stars, timer);
-      if (logos.length) animateLogos(logos, timer);
+      if (logos.length) animateLogos(logos, camera, timer);
 
       const bloomProgress = Math.min(Math.sin(time) * 0.17 + 0.18, 0.2);
 
@@ -468,17 +570,7 @@ export default function ThreeScene() {
           Math.sin(time * 1.3 + phase + blade.position.x * 0.2) * 0.23;
       });
 
-      raycaster.setFromCamera(mouse, camera);
-      const intersects = raycaster.intersectObjects(logos);
-
-      logos.forEach((logo) => {
-        logo.userData.hovered = false;
-      });
-
-      if (intersects.length > 0) {
-        const hoveredLogo = intersects[0].object as THREE.Mesh;
-        hoveredLogo.userData.hovered = true;
-      }
+      updateLogoOverlays();
 
       renderer.render(scene, camera);
     }
@@ -492,7 +584,8 @@ export default function ThreeScene() {
       cancelAnimationFrame(raf);
 
       window.removeEventListener("resize", onResize);
-      mountNode.removeEventListener("pointermove", onPointerMove);
+      containerNode.removeEventListener("pointermove", onPointerMove);
+      logosRef.current = [];
 
       if (renderer) {
         renderer.dispose();
@@ -518,13 +611,77 @@ export default function ThreeScene() {
 
   return (
     <div
-      ref={mountRef}
+      ref={containerRef}
       style={{
+        position: "relative",
         width: "100%",
         height: sceneHeight,
         minHeight: "100svh",
         touchAction: "none",
       }}
-    />
+    >
+      <div
+        ref={mountRef}
+        style={{
+          position: "absolute",
+          inset: 0,
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          zIndex: 10,
+          pointerEvents: "none",
+        }}
+      >
+        {logoKeys.map((key) => {
+          const link = SITE_LINKS[key];
+          const linkStyle: React.CSSProperties = {
+            position: "absolute",
+            pointerEvents: "auto",
+            cursor: "pointer",
+            transform: "translate(-50%, -50%)",
+            touchAction: "manipulation",
+          };
+
+          if (link.type === "scroll-top") {
+            return (
+              <a
+                key={key}
+                ref={(el) => {
+                  linkRefs.current[key] = el;
+                }}
+                href="#"
+                aria-label={key}
+                style={linkStyle}
+                onClick={(event) => {
+                  event.preventDefault();
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                onMouseEnter={() => setLogoHovered(key, true)}
+                onMouseLeave={() => setLogoHovered(key, false)}
+              />
+            );
+          }
+
+          return (
+            <a
+              key={key}
+              ref={(el) => {
+                linkRefs.current[key] = el;
+              }}
+              href={link.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={key}
+              style={linkStyle}
+              onMouseEnter={() => setLogoHovered(key, true)}
+              onMouseLeave={() => setLogoHovered(key, false)}
+            />
+          );
+        })}
+      </div>
+    </div>
   );
 }
