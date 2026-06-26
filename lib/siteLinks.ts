@@ -5,7 +5,7 @@ export const SITE_LINKS = {
   },
   linkedin: {
     type: "external" as const,
-    url: "www.linkedin.com/in/adamarysmuniz-3348f93",
+    url: "https://www.linkedin.com/in/adamarysmuniz-3348f93/",
   },
 } as const;
 
