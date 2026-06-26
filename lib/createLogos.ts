@@ -8,7 +8,6 @@ export function createLogos(scene: THREE.Scene): THREE.Mesh[] {
   const loader = new THREE.TextureLoader();
 
   const items = [
-    { name: "home", path: "/icons/house-solid.png", x: -4, y: 9 },
     { name: "github", path: "/icons/github-solid.png", x: 0, y: 9 },
     { name: "linkedin", path: "/icons/linkedin-solid.png", x: 4, y: 9 },
   ];

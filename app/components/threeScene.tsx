@@ -43,7 +43,7 @@ export default function ThreeScene() {
   const logosRef = useRef<THREE.Mesh[]>([]);
   const [sceneHeight, setSceneHeight] = useState("100vh");
 
-  const logoKeys: SiteLinkKey[] = ["home", "github", "linkedin"];
+  const logoKeys: SiteLinkKey[] = ["github", "linkedin"];
 
   function setLogoHovered(key: SiteLinkKey, hovered: boolean) {
     const logo = logosRef.current.find((mesh) => mesh.userData.name === key);
@@ -63,7 +63,7 @@ export default function ThreeScene() {
     let camera!: THREE.PerspectiveCamera;
     let renderer!: THREE.WebGLRenderer;
 
-    let petals: THREE.Object3D[] = [];
+    let flowers: THREE.Group[] = [];
     let clouds: THREE.Mesh[] = [];
     let stars: THREE.Points | null = null;
     let logos: THREE.Mesh[] = [];
@@ -326,6 +326,17 @@ export default function ThreeScene() {
 
       group.position.copy(position);
       group.scale.set(scale, scale, scale);
+
+      // Breeze data so each flower bends at its base independently.
+      // The group's pivot sits at ground level, so rotating it sways the
+      // whole stem + head like a real sunflower in the wind.
+      group.userData.phase = Math.random() * Math.PI * 2;
+      group.userData.swayAmount = 0.8 + Math.random() * 0.5;
+      // Wind rolls across the field, so the phase depends on position
+      group.userData.windPhase = position.x * 0.16 + position.z * 0.12;
+      // Steady direction the breeze is blowing (radians)
+      group.userData.windDir = Math.PI * 0.15;
+
       return group;
     }
 
@@ -432,7 +443,7 @@ export default function ThreeScene() {
       logosRef.current = logos;
 
       const rand = mulberry32(12345);
-      petals = [];
+      flowers = [];
 
       const flowerCount = config.flowerCount;
       const spacing = config.flowerSpacing;
@@ -457,12 +468,7 @@ export default function ThreeScene() {
           scale,
         });
 
-        flower.traverse((obj: any) => {
-          if (obj?.isMesh && obj.geometry?.type === "LatheGeometry") {
-            petals.push(obj);
-          }
-        });
-
+        flowers.push(flower);
         scene.add(flower);
       }
 
@@ -541,14 +547,32 @@ export default function ThreeScene() {
       if (stars) animateStars(stars, timer);
       if (logos.length) animateLogos(logos, camera, timer);
 
-      const bloomProgress = Math.min(Math.sin(time) * 0.17 + 0.18, 0.2);
+      // --- Breeze controls (tweak these to taste) ---
+      const BREEZE_SPEED = 1.0; // how fast the flowers sway back and forth
+      const BREEZE_TRAVEL = 0.5; // speed of gusts rolling across the field
+      const BREEZE_STRENGTH = 0.20; // max bend (radians) of a flower in the wind
+      const BREEZE_FLUTTER = 0.05; // small fast wobble layered on top
 
-      petals.forEach((petal: any) => {
-        petal.rotation.x = THREE.MathUtils.lerp(
-          Math.PI / 2.2,
-          Math.PI / 2.9,
-          bloomProgress
-        );
+      // Gusts: a slow swell so the wind ebbs, then surges
+      const gust = 0.55 + 0.45 * Math.sin(time * 0.25);
+
+      flowers.forEach((flower: any) => {
+        const d = flower.userData;
+
+        // Two offset waves give an organic, non-repeating sway, plus a quick
+        // flutter so the bend never looks perfectly smooth.
+        const bend =
+          (Math.sin(time * BREEZE_SPEED + d.phase + time * BREEZE_TRAVEL + d.windPhase) *
+            0.75 +
+            Math.sin(time * BREEZE_SPEED * 1.9 + d.phase * 1.4) * 0.25 +
+            Math.sin(time * BREEZE_SPEED * 4.5 + d.phase) * BREEZE_FLUTTER) *
+          BREEZE_STRENGTH *
+          d.swayAmount *
+          gust;
+
+        // Bend mostly along the wind direction, with a little cross-sway
+        flower.rotation.x = Math.cos(d.windDir) * bend;
+        flower.rotation.z = -Math.sin(d.windDir) * bend - bend * 0.25;
       });
 
       clouds.forEach((cloud: any) => {
@@ -644,26 +668,6 @@ export default function ThreeScene() {
             transform: "translate(-50%, -50%)",
             touchAction: "manipulation",
           };
-
-          if (link.type === "scroll-top") {
-            return (
-              <a
-                key={key}
-                ref={(el) => {
-                  linkRefs.current[key] = el;
-                }}
-                href="#"
-                aria-label={key}
-                style={linkStyle}
-                onClick={(event) => {
-                  event.preventDefault();
-                  window.scrollTo({ top: 0, behavior: "smooth" });
-                }}
-                onMouseEnter={() => setLogoHovered(key, true)}
-                onMouseLeave={() => setLogoHovered(key, false)}
-              />
-            );
-          }
 
           return (
             <a
