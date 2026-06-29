@@ -1,0 +1,22 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #fdfbf7 0%, #f5ecd9 55%, #e8d8b8 100%);
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity 400ms ease;
+}
+
+.overlayHidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.seedling {
+  width: 140px;
+  height: 140px;
+}

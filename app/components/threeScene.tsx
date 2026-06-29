@@ -36,12 +36,21 @@ type ScreenConfig = {
   sceneHeight: string;
 };
 
-export default function ThreeScene() {
+type ThreeSceneProps = {
+  onReady?: () => void;
+};
+
+export default function ThreeScene({ onReady }: ThreeSceneProps = {}) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const onReadyRef = useRef(onReady);
   const mountRef = useRef<HTMLDivElement | null>(null);
   const linkRefs = useRef<Partial<Record<SiteLinkKey, HTMLAnchorElement | null>>>({});
   const logosRef = useRef<THREE.Mesh[]>([]);
   const [sceneHeight, setSceneHeight] = useState("100vh");
+
+  useEffect(() => {
+    onReadyRef.current = onReady;
+  }, [onReady]);
 
   const logoKeys: SiteLinkKey[] = ["github", "linkedin"];
 
@@ -91,6 +100,7 @@ export default function ThreeScene() {
     const timer = new THREE.Timer();
 
     let raf = 0;
+    let firstFrameDone = false;
 
     function getScreenConfig(): ScreenConfig {
       const width = window.innerWidth;
@@ -597,6 +607,11 @@ export default function ThreeScene() {
       updateLogoOverlays();
 
       renderer.render(scene, camera);
+
+      if (!firstFrameDone) {
+        firstFrameDone = true;
+        onReadyRef.current?.();
+      }
     }
 
     updateSceneHeight();

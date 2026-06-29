@@ -1,6 +1,6 @@
 // app/page.tsx
-import ThreeScene from "./components/threeScene";
+import SceneWithLoader from "./components/sceneWithLoader";
 
 export default function Home() {
-  return <ThreeScene />;
+  return <SceneWithLoader />;
 }
