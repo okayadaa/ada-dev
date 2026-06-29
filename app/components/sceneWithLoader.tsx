@@ -5,8 +5,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Loader from "./loader";
 import ThreeScene from "./threeScene";
 
-const MIN_DISPLAY_MS = 700;
-const FADE_OUT_MS = 400;
+const MIN_DISPLAY_MS = 4000;
+const FADE_OUT_MS = 600;
 
 export default function SceneWithLoader() {
   const [sceneReady, setSceneReady] = useState(false);
