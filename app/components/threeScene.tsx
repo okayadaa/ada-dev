@@ -15,6 +15,7 @@ import {
   applySkyToUniforms,
   type Sky,
 } from "@/lib/timeOfDay";
+import AboutModal from "./aboutModal";
 
 type InputState = { mouseX: number; mouseY: number };
 
@@ -47,12 +48,13 @@ export default function ThreeScene({ onReady }: ThreeSceneProps = {}) {
   const linkRefs = useRef<Partial<Record<SiteLinkKey, HTMLAnchorElement | null>>>({});
   const logosRef = useRef<THREE.Mesh[]>([]);
   const [sceneHeight, setSceneHeight] = useState("100vh");
+  const [aboutOpen, setAboutOpen] = useState(false);
 
   useEffect(() => {
     onReadyRef.current = onReady;
   }, [onReady]);
 
-  const logoKeys: SiteLinkKey[] = ["github", "linkedin"];
+  const logoKeys: SiteLinkKey[] = ["github", "linkedin", "about"];
 
   function setLogoHovered(key: SiteLinkKey, hovered: boolean) {
     const logo = logosRef.current.find((mesh) => mesh.userData.name === key);
@@ -676,6 +678,7 @@ export default function ThreeScene({ onReady }: ThreeSceneProps = {}) {
       >
         {logoKeys.map((key) => {
           const link = SITE_LINKS[key];
+          const isModal = link.type === "modal";
           const linkStyle: React.CSSProperties = {
             position: "absolute",
             pointerEvents: "auto",
@@ -690,17 +693,24 @@ export default function ThreeScene({ onReady }: ThreeSceneProps = {}) {
               ref={(el) => {
                 linkRefs.current[key] = el;
               }}
-              href={link.url}
-              target="_blank"
-              rel="noopener noreferrer"
+              href={link.type === "modal" ? "#" : link.url}
+              target={link.type === "external" ? "_blank" : undefined}
+              rel={link.type === "external" ? "noopener noreferrer" : undefined}
               aria-label={key}
               style={linkStyle}
+              onClick={(e) => {
+                if (isModal) {
+                  e.preventDefault();
+                  setAboutOpen(true);
+                }
+              }}
               onMouseEnter={() => setLogoHovered(key, true)}
               onMouseLeave={() => setLogoHovered(key, false)}
             />
           );
         })}
       </div>
+      <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} />
     </div>
   );
 }
