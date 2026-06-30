@@ -14,9 +14,6 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Welcome to my site!",
-  icons: {
-    icon: [{ url: "/seed-germination.jpg", type: "image/jpeg" }],
-  },
 };
 
 export default function RootLayout({
