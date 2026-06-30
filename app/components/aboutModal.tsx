@@ -1,8 +1,14 @@
 "use client";
 
+import { Caveat } from "next/font/google";
 import { useEffect, useState } from "react";
 
 import styles from "./aboutModal.module.css";
+
+const caveat = Caveat({
+  subsets: ["latin"],
+  weight: ["400", "600"],
+});
 
 const EXIT_DURATION = 200;
 
@@ -58,10 +64,14 @@ export default function AboutModal({ open, onClose }: AboutModalProps) {
         >
           ×
         </button>
-        <h2 className={styles.title}>About Me</h2>
-        <p className={styles.body}>
-          Placeholder bio — add a short introduction about yourself here.
-        </p>
+        <div className={`${styles.page} ${caveat.className}`}>
+          <h2 className={styles.title}>About Me:</h2>
+          <p className={styles.body}>
+          Hi, I'm Ada, a developer based in New York City. I'm passionate about building interactive web experiences and exploring 3D web development, data analytics, and emerging AI technologies. I enjoy transforming ideas into intuitive, user-centered applications that blend creativity with technical problem-solving.
+<br></br><br></br> 
+My experience spans both frontend and backend development, and I'm always looking for opportunities to expand my skills through hands-on projects. I primarily work with React, Next.js, Three.js, TypeScript, Python, FastAPI, AWS, Terraform, and Vercel. Whether I'm experimenting with new technologies or refining existing applications, I'm motivated by continuous learning and creating solutions that are both functional and engaging.
+          </p>
+        </div>
       </div>
     </div>
   );

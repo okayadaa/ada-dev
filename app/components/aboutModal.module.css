@@ -15,44 +15,83 @@
 }
 
 .card {
+  --margin-left: 2.25rem;
+  --line-height: 32px;
+
   position: relative;
-  width: 16rem;
-  height: 16rem;
+  width: min(34rem, calc(100vw - 2rem));
+  min-height: 16rem;
+  max-height: min(26rem, calc(100vh - 4rem));
   box-sizing: border-box;
-  padding: 1.5rem;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  overflow: auto;
+  overflow: hidden;
   background: #f7f1e3;
   color: #2a2620;
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  border-radius: 16px;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(42, 38, 32, 0.12);
+  border-radius: 4px;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.65) inset,
+    0 24px 60px rgba(0, 0, 0, 0.35);
   animation: pop 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--margin-left);
+  width: 2px;
+  background: rgba(220, 80, 80, 0.55);
+  pointer-events: none;
+  z-index: 1;
 }
 
 .cardClosing {
   animation: popOut 200ms cubic-bezier(0.4, 0, 1, 1) forwards;
 }
 
+.page {
+  position: relative;
+  z-index: 0;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: auto;
+  padding: 0 1.25rem 1rem calc(var(--margin-left) + 1rem);
+  background-color: #f7f1e3;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    #f7f1e3,
+    #f7f1e3 calc(var(--line-height) - 1px),
+    rgba(100, 140, 200, 0.32) calc(var(--line-height) - 1px),
+    rgba(100, 140, 200, 0.32) var(--line-height)
+  );
+  background-attachment: local;
+  line-height: var(--line-height);
+}
+
 .title {
   margin: 0;
-  font-size: 1.35rem;
+  font-size: 1.5rem;
   font-weight: 600;
+  line-height: var(--line-height);
 }
 
 .body {
   margin: 0;
-  font-size: 0.92rem;
-  line-height: 1.5;
-  opacity: 0.85;
+  font-size: 1.25rem;
+  line-height: var(--line-height);
+  opacity: 0.9;
 }
 
 .close {
   position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
+  top: 0.35rem;
+  right: 0.35rem;
+  z-index: 1;
   width: 1.75rem;
   height: 1.75rem;
   display: flex;
@@ -62,6 +101,7 @@
   border-radius: 50%;
   background: rgba(42, 38, 32, 0.08);
   color: #2a2620;
+  font-family: Arial, Helvetica, sans-serif;
   font-size: 1.1rem;
   line-height: 1;
   cursor: pointer;
