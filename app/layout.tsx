@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Ada Dev",
   icons: {
-    icon: [{ url: "/seedling.svg", type: "image/svg+xml" }],
+    icon: [{ url: "/seed-germination.jpg", type: "image/jpeg" }],
   },
 };
 
