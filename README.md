@@ -10,8 +10,6 @@
 
 This repo powers my personal site: a single-page 3D sunflower field where the sky transitions through dawn, day, dusk, and night based on the visitor's local time. It's built with Next.js 16 (App Router) and Three.js, with procedural geometry and a small set of focused modules under `lib/`.
 
-**[GitHub](https://github.com/okayadaa)** · **[LinkedIn](https://www.linkedin.com/in/adamarysmuniz-3348f93/)** · **Live site:** _add your deployment URL after publishing to Vercel_
-
 ## Highlights
 
 - **Time-of-day sky** — 24h gradient shader in [`lib/timeOfDay.ts`](lib/timeOfDay.ts); drives sky color, lighting, and star visibility
