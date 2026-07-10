@@ -13,9 +13,4 @@ export const SITE_LINKS = {
 } as const;
 
 export type SiteLinkKey = keyof typeof SITE_LINKS;
-export type SiteLink = (typeof SITE_LINKS)[SiteLinkKey];
 
-export function handleSiteLink(link: SiteLink) {
-  if (link.type === "modal") return;
-  window.open(link.url, "_blank", "noopener,noreferrer");
-}
