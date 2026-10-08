@@ -52,8 +52,9 @@ export function createClouds(
     cloud.userData = {
       baseX: x,
       baseY: y,
-      speed: 0.15 + Math.random() * 0.3,
-      offset: Math.random() * Math.PI * 2,
+      // Distant clouds drift less; small variations keep the layers natural.
+      driftAmplitude: (far ? 3 : 5) * (0.9 + Math.random() * 0.2),
+      windLag: (z * -0.035) + Math.random() * 0.08,
     };
 
     scene.add(cloud);
@@ -101,5 +102,25 @@ export function createClouds(
       // Never let bottom-corner clouds drop below the field onto the icons.
       makeCloud(x, Math.max(y, minY), Math.random() < 0.5);
     }
+  }
+}
+
+/** Gentle horizontal wind: a full left/right cycle takes about 90 seconds. */
+export function animateClouds(
+  clouds: THREE.Mesh[],
+  camera: THREE.PerspectiveCamera,
+  elapsedSeconds: number,
+  reducedMotion = false,
+) {
+  const windPhase = elapsedSeconds * (Math.PI * 2 / 90);
+  for (const cloud of clouds) {
+    const { baseX, baseY, driftAmplitude, windLag } = cloud.userData;
+    // Subtract the initial offset so newly loaded clouds never jump. A
+    // shared phase keeps the field moving with the same prevailing breeze.
+    const drift = reducedMotion
+      ? 0
+      : (Math.sin(windPhase + windLag) - Math.sin(windLag)) * driftAmplitude;
+    cloud.position.set(baseX + drift, baseY, cloud.position.z);
+    cloud.lookAt(camera.position);
   }
 }

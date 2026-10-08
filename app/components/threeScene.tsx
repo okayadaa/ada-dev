@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 
-import { createClouds } from "@/lib/clouds";
+import { createClouds, animateClouds } from "@/lib/clouds";
 import { createStars, animateStars } from "@/lib/stars";
 import { createLogos, animateLogos, getLogoScreenSize } from "@/lib/createLogos";
 import { SITE_LINKS, type SiteLinkKey } from "@/lib/siteLinks";
@@ -39,11 +39,13 @@ type ScreenConfig = {
 
 type ThreeSceneProps = {
   onReady?: () => void;
+  bloom?: boolean;
 };
 
-export default function ThreeScene({ onReady }: ThreeSceneProps = {}) {
+export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = {}) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const onReadyRef = useRef(onReady);
+  const bloomRef = useRef(bloom);
   const mountRef = useRef<HTMLDivElement | null>(null);
   const linkRefs = useRef<Partial<Record<SiteLinkKey, HTMLAnchorElement | null>>>({});
   const logosRef = useRef<THREE.Mesh[]>([]);
@@ -53,6 +55,10 @@ export default function ThreeScene({ onReady }: ThreeSceneProps = {}) {
   useEffect(() => {
     onReadyRef.current = onReady;
   }, [onReady]);
+
+  useEffect(() => {
+    bloomRef.current = bloom;
+  }, [bloom]);
 
   const logoKeys: SiteLinkKey[] = ["github", "linkedin", "about"];
 
@@ -103,6 +109,13 @@ export default function ThreeScene({ onReady }: ThreeSceneProps = {}) {
 
     let raf = 0;
     let firstFrameDone = false;
+    let bloomStart: number | null = null;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const blooms: {
+      disk: THREE.Mesh;
+      delay: number;
+      petals: { mesh: THREE.Mesh; openRotation: number; openZ: number }[];
+    }[] = [];
 
     function getScreenConfig(): ScreenConfig {
       const width = window.innerWidth;
@@ -126,9 +139,9 @@ export default function ThreeScene({ onReady }: ThreeSceneProps = {}) {
         grassWidth: isMobile ? 74 : isTablet ? 77 : 80,
         grassDepth: isMobile ? 64 : isTablet ? 66 : 69,
 
-        // Stronger touch/mobile response
-        swayXStrength: isMobile ? 6.2 : isTablet ? 6.5 : 7,
-        swayYStrength: isMobile ? 4.4 : isTablet ? 4.7 : 5,
+        // Keep navigation in view on narrow touch screens.
+        swayXStrength: isMobile ? 0.8 : isTablet ? 6.5 : 7,
+        swayYStrength: isMobile ? 0.6 : isTablet ? 4.7 : 5,
         inputDamping: isMobile ? 1.35 : isTablet ? 1.1 : 1,
 
         // Desktop unchanged
@@ -205,44 +218,55 @@ export default function ThreeScene({ onReady }: ThreeSceneProps = {}) {
     function createLeaf(scale = 1) {
       const shape = new THREE.Shape();
       shape.moveTo(0, 0);
-      shape.quadraticCurveTo(0.18 * scale, 0.3 * scale, 0, 0.8 * scale);
-      shape.quadraticCurveTo(-0.18 * scale, 0.3 * scale, 0, 0);
-
-      const geometry = new THREE.ExtrudeGeometry(shape, {
-        steps: 1,
-        depth: 0.01 * scale,
-        bevelEnabled: false,
-      });
-      geometry.rotateX(Math.PI / 2);
-
+      shape.bezierCurveTo(-0.38 * scale, 0.05 * scale, -0.45 * scale, 0.4 * scale, 0, 0.85 * scale);
+      shape.bezierCurveTo(0.45 * scale, 0.4 * scale, 0.38 * scale, 0.05 * scale, 0, 0);
+      const geometry = new THREE.ShapeGeometry(shape, 10);
+      const positions = geometry.attributes.position;
+      for (let i = 0; i < positions.count; i++) {
+        const y = positions.getY(i);
+        positions.setZ(i, 0.12 * Math.sin(y / scale * Math.PI) - Math.abs(positions.getX(i)) * 0.25);
+      }
+      geometry.computeVertexNormals();
       const material = new THREE.MeshStandardMaterial({
-        color: 0x228b22,
-        roughness: 0.7,
-        metalness: 0.1,
+        color: 0x48752c,
+        roughness: 0.9,
         side: THREE.DoubleSide,
       });
 
       const leaf = new THREE.Mesh(geometry, material);
+      const vein = new THREE.Mesh(
+        new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(
+          new THREE.Vector3(0, 0, 0.01),
+          new THREE.Vector3(0, 0.4 * scale, 0.2),
+          new THREE.Vector3(0, 0.83 * scale, 0.06),
+        ), 8, 0.008, 3, false),
+        new THREE.MeshStandardMaterial({ color: 0x809748, roughness: 1 }),
+      );
+      leaf.add(vein);
       leaf.castShadow = true;
       return leaf;
     }
 
     function createPetal(color = 0xffe066, emissive = 0xffe066, scale = 1) {
-      const points: THREE.Vector2[] = [];
-      points.push(new THREE.Vector2(0, 0));
-      points.push(new THREE.Vector2(0.07 * scale, 0.3 * scale));
-      points.push(new THREE.Vector2(0.12 * scale, 0.8 * scale));
-      points.push(new THREE.Vector2(0.07 * scale, 1.4 * scale));
-      points.push(new THREE.Vector2(0, 1.7 * scale));
-
-      const geometry = new THREE.LatheGeometry(points, 24, 0, Math.PI);
-      geometry.translate(0, -0.85 * scale, 0);
-
+      const geometry = new THREE.PlaneGeometry(1, 1, 6, 12);
+      const positions = geometry.attributes.position;
+      for (let i = 0; i < positions.count; i++) {
+        const t = positions.getY(i) + 0.5;
+        const across = positions.getX(i) * 2;
+        const width = Math.pow(Math.sin(Math.PI * t), 0.75) * 0.14 * scale;
+        positions.setXYZ(i,
+          across * width,
+          t * 0.88 * scale,
+          (0.10 * Math.sin(t * Math.PI) + 0.09 * t * t + across * across * 0.035) * scale,
+        );
+      }
+      geometry.computeVertexNormals();
       const material = new THREE.MeshStandardMaterial({
         color,
         emissive,
-        roughness: 0.35,
-        metalness: 0.15,
+        emissiveIntensity: 0.025,
+        roughness: 0.8,
+        metalness: 0,
         side: THREE.DoubleSide,
       });
 
@@ -262,20 +286,30 @@ export default function ThreeScene({ onReady }: ThreeSceneProps = {}) {
       const {
         position = new THREE.Vector3(0, 0, 0),
         petalCount = 22,
-        petalColor = 0xffe066,
-        petalEmissive = 0xffe066,
-        stemColor = 0x228b22,
-        scale = 1,
+        petalColor = 0xf5bd23,
+        petalEmissive = 0xf5bd23,
+        stemColor = 0x52732d,
+        scale: flowerScale = 1,
       } = options;
+      const scale = 1;
 
       const group = new THREE.Group();
 
       const stem = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.07 * scale, 0.09 * scale, 2.3 * scale, 13),
-        new THREE.MeshStandardMaterial({ color: stemColor })
+        new THREE.TubeGeometry(new THREE.CatmullRomCurve3([
+          new THREE.Vector3(0, 0, 0),
+          new THREE.Vector3(-0.04, 0.75, 0.02),
+          new THREE.Vector3(0.04, 1.55, 0),
+          new THREE.Vector3(0.1, 2.2, 0),
+        ]), 16, 0.065, 7, false),
+        new THREE.MeshStandardMaterial({ color: stemColor, roughness: 0.95 }),
       );
-      stem.position.y = 1.1 * scale;
+      stem.castShadow = true;
       group.add(stem);
+      const head = new THREE.Group();
+      head.position.set(0.1, 2.2, 0);
+      head.rotation.x = 0.65 + Math.random() * 0.2;
+      group.add(head);
 
       const leafCount = 3 + Math.floor(Math.random() * 2);
       for (let i = 0; i < leafCount; i++) {
@@ -289,40 +323,59 @@ export default function ThreeScene({ onReady }: ThreeSceneProps = {}) {
         leaf.position.z = 0;
         leaf.rotation.z = side * (Math.PI / 2.1 + Math.random() * 0.2);
         leaf.rotation.y = side * (Math.PI / 2.3);
-        leaf.rotation.x = Math.PI / 2.4 + (Math.random() - 0.5) * 0.2;
+        leaf.rotation.x = 0.35 + (Math.random() - 0.5) * 0.2;
         group.add(leaf);
       }
 
-      const diskGeometry = new THREE.SphereGeometry(
-        0.32 * scale,
-        32,
-        16,
-        0,
-        Math.PI * 2,
-        0,
-        Math.PI * 0.7
-      );
+      const diskGeometry = new THREE.SphereGeometry(0.34, 24, 12);
+      diskGeometry.scale(1, 0.28, 1);
       const diskMaterial = new THREE.MeshStandardMaterial({
-        color: 0x4b2e05,
-        roughness: 0.7,
-        metalness: 0.2,
+        color: 0x49301b, roughness: 1, metalness: 0,
       });
       const disk = new THREE.Mesh(diskGeometry, diskMaterial);
-      disk.position.y = 2.2 * scale;
       disk.castShadow = true;
-      group.add(disk);
+      head.add(disk);
+      // Golden-angle seed spirals, batched into one draw call per head.
+      const seeds = new THREE.InstancedMesh(
+        new THREE.SphereGeometry(0.018, 5, 4),
+        new THREE.MeshStandardMaterial({ color: 0x79502b, roughness: 1 }),
+        180,
+      );
+      const seedTransform = new THREE.Object3D();
+      const seedColor = new THREE.Color();
+      for (let i = 0; i < 180; i++) {
+        const radius = 0.315 * Math.sqrt((i + 0.5) / 180);
+        const angle = i * 2.399963;
+        seedTransform.position.set(Math.cos(angle) * radius,
+          0.095 * Math.sqrt(1 - (radius / 0.34) ** 2), Math.sin(angle) * radius);
+        seedTransform.scale.set(0.8, 0.5, 1);
+        seedTransform.rotation.y = angle;
+        seedTransform.updateMatrix();
+        seeds.setMatrixAt(i, seedTransform.matrix);
+        seeds.setColorAt(i, seedColor.setHSL(0.09, 0.45, 0.16 + (i % 7) * 0.018));
+      }
+      disk.add(seeds);
 
-      const petalHeightOffset = 2.2 * scale;
-      for (let i = 0; i < petalCount; i++) {
+      const flowerBloom = {
+        disk,
+        // Roll the bloom from left to right across the field.
+        delay: THREE.MathUtils.clamp((position.x + 25) / 50, 0, 1) * 1.4,
+        petals: [] as { mesh: THREE.Mesh; openRotation: number; openZ: number }[],
+      };
+      disk.scale.setScalar(0.45);
+      blooms.push(flowerBloom);
+
+      for (let i = 0; i < petalCount * 2; i++) {
+        const layer = Math.floor(i / petalCount);
         const petal = createPetal(
-          petalColor,
+          layer ? 0xffcf38 : petalColor,
           petalEmissive,
           scale * (0.9 + Math.random() * 0.2)
         );
 
-        const angle = (i / petalCount) * Math.PI * 2;
+        const angle = (i / petalCount) * Math.PI * 2 + layer * Math.PI / petalCount;
         const holder = new THREE.Object3D();
-        holder.position.set(0, petalHeightOffset, 0);
+        holder.position.set(0, layer ? 0.015 : -0.025, 0);
 
         petal.rotation.set(
           Math.PI / 2.1 + (Math.random() - 0.5) * 0.15,
@@ -330,14 +383,22 @@ export default function ThreeScene({ onReady }: ThreeSceneProps = {}) {
           (Math.random() - 0.5) * 0.1
         );
 
-        petal.position.set(0, 0, 0.38 * scale + Math.random() * 0.05);
+        petal.position.set(0, 0, 0.27 * scale + Math.random() * 0.035);
+        flowerBloom.petals.push({
+          mesh: petal,
+          openRotation: petal.rotation.x,
+          openZ: petal.position.z,
+        });
+        petal.rotation.x = 0.12;
+        petal.position.z *= 0.25;
+        petal.scale.set(0.65, 0.35, 0.65);
         holder.add(petal);
         holder.rotation.y = angle;
-        group.add(holder);
+        head.add(holder);
       }
 
       group.position.copy(position);
-      group.scale.set(scale, scale, scale);
+      group.scale.setScalar(flowerScale);
 
       // Breeze data so each flower bends at its base independently.
       // The group's pivot sits at ground level, so rotating it sways the
@@ -360,28 +421,52 @@ export default function ThreeScene({ onReady }: ThreeSceneProps = {}) {
       maxHeight = 1.1,
       color = 0x2e6e1a,
     } = {}) {
-      const grassGeometry = new THREE.PlaneGeometry(0.08, 1, 1, 3);
-      const baseMaterial = new THREE.MeshStandardMaterial({
-        color,
-        side: THREE.DoubleSide,
-        roughness: 0.8,
-        metalness: 0.1,
-        transparent: true,
-        opacity: 0.93,
-      });
+      // Root the blade at y=0 so wind bends it from the ground.
+      const grassGeometry = new THREE.PlaneGeometry(0.085, 1, 2, 7);
+      const positions = grassGeometry.attributes.position;
+      const colors: number[] = [];
+      for (let i = 0; i < positions.count; i++) {
+        const height = positions.getY(i) + 0.5;
+        const across = positions.getX(i) / 0.0425;
+        positions.setXYZ(i,
+          positions.getX(i) * Math.pow(1 - height, 0.8) + 0.1 * height * height,
+          height,
+          0.18 * height * height + Math.abs(across) * 0.018 * Math.sin(height * Math.PI),
+        );
+        const shade = new THREE.Color().setRGB(
+          0.48 + height * 0.35,
+          0.58 + height * 0.35,
+          0.35 + height * 0.22,
+        );
+        colors.push(shade.r, shade.g, shade.b);
+      }
+      grassGeometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+      grassGeometry.computeVertexNormals();
+      // A small shared palette avoids thousands of separate materials.
+      const materials = Array.from({ length: 6 }, (_, i) =>
+        new THREE.MeshStandardMaterial({
+          color: new THREE.Color(color).offsetHSL((i - 2) * 0.008, -0.08, (i - 2) * 0.018),
+          vertexColors: true,
+          side: THREE.DoubleSide,
+          roughness: 0.95,
+          metalness: 0,
+        }),
+      );
 
       for (let i = 0; i < count; i++) {
-        const blade = new THREE.Mesh(grassGeometry, baseMaterial.clone());
+        const blade = new THREE.Mesh(grassGeometry, materials[i % materials.length]);
 
         blade.position.x = (Math.random() - 0.5) * width;
         blade.position.z = (Math.random() - 0.5) * depth;
-        blade.position.y = 0.5;
+        blade.position.y = 0;
 
         const s = minHeight + Math.random() * (maxHeight - minHeight);
-        blade.scale.y = s;
+        blade.scale.set(0.65 + Math.random() * 0.7, s, 1);
 
         blade.rotation.y = Math.random() * Math.PI * 2;
         blade.rotation.z = (Math.random() - 0.5) * 0.2;
+        blade.userData.lean = blade.rotation.z;
+        blade.userData.flex = 0.7 + Math.random() * 0.6;
 
         blade.castShadow = true;
         blade.receiveShadow = true;
@@ -544,6 +629,33 @@ export default function ThreeScene({ onReady }: ThreeSceneProps = {}) {
       timer.update();
       const time = timer.getElapsed();
 
+      // Start only after the loader has completely faded out. Use elapsed
+      // seconds so the duration is independent of the display's frame rate.
+      if (bloomRef.current && bloomStart === null) bloomStart = time;
+      if (bloomStart !== null) {
+        let complete = true;
+        for (const flower of blooms) {
+          const progress = reducedMotion.matches
+            ? 1
+            : THREE.MathUtils.clamp((time - bloomStart - flower.delay) / 2.4, 0, 1);
+          const eased = progress * progress * (3 - 2 * progress);
+          flower.disk.scale.setScalar(THREE.MathUtils.lerp(0.45, 1, eased));
+          for (const petal of flower.petals) {
+            petal.mesh.rotation.x = THREE.MathUtils.lerp(0.12, petal.openRotation, eased);
+            petal.mesh.position.z = THREE.MathUtils.lerp(petal.openZ * 0.25, petal.openZ, eased);
+            petal.mesh.scale.set(
+              THREE.MathUtils.lerp(0.65, 1, eased),
+              THREE.MathUtils.lerp(0.35, 1, eased),
+              THREE.MathUtils.lerp(0.65, 1, eased),
+            );
+          }
+          if (progress < 1) complete = false;
+        }
+        // Keep the finished flowers at their original transforms without
+        // doing per-petal work throughout the rest of the visit.
+        if (complete) blooms.length = 0;
+      }
+
       getSkyState(resolveHour(), skyState);
       if (sky) applySkyToUniforms(sky, skyState);
       if (ambient) ambient.intensity = skyState.ambient;
@@ -587,23 +699,15 @@ export default function ThreeScene({ onReady }: ThreeSceneProps = {}) {
         flower.rotation.z = -Math.sin(d.windDir) * bend - bend * 0.25;
       });
 
-      clouds.forEach((cloud: any) => {
-        cloud.position.x =
-          cloud.userData.baseX +
-          Math.sin(time * 0.1 + cloud.userData.offset) * 6 +
-          Math.sin(time * 0.03) * 3;
+      animateClouds(clouds, camera, time, reducedMotion.matches);
 
-        cloud.position.y =
-          cloud.userData.baseY +
-          Math.cos(time * 0.15 + cloud.userData.offset) * 0.6;
-
-        cloud.lookAt(camera.position);
-      });
-
-      grassBlades.forEach((blade, i) => {
-        const phase = i * 0.14;
-        blade.rotation.x =
-          Math.sin(time * 1.3 + phase + blade.position.x * 0.2) * 0.23;
+      grassBlades.forEach((blade) => {
+        const phase = blade.position.x * 0.22 + blade.position.z * 0.16;
+        const wind = reducedMotion.matches ? 0 :
+          (Math.sin(time * 1.1 + phase) * 0.14 +
+           Math.sin(time * 2.3 + phase * 1.3) * 0.025) * blade.userData.flex;
+        blade.rotation.x = wind;
+        blade.rotation.z = blade.userData.lean + wind * 0.35;
       });
 
       updateLogoOverlays();

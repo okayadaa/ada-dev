@@ -47,7 +47,7 @@ export default function SceneWithLoader() {
 
   return (
     <>
-      <ThreeScene onReady={handleSceneReady} />
+      <ThreeScene onReady={handleSceneReady} bloom={!mounted} />
       {mounted ? <Loader hidden={dismissed} /> : null}
     </>
   );
