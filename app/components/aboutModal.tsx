@@ -82,6 +82,14 @@ My experience spans both frontend and backend development, and I'm always lookin
             >
               https://www.chaicoffeelit.org/
             </a>
+            <a
+              className={styles.projectLink}
+              href="https://pawscare-plus.streamlit.app/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              https://pawscare-plus.streamlit.app/
+            </a>
           </section>
           </div>
           <aside className={styles.doodles} aria-hidden="true">

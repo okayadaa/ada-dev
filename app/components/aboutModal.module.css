@@ -181,6 +181,9 @@
 }
 
 .projects {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
   margin-top: 1.5rem;
   padding-top: 0.5rem;
   border-top: 1px dashed rgba(91, 125, 101, 0.4);
