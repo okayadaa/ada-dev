@@ -172,9 +172,9 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
         const dx = e.clientX - drag.x;
         const dy = e.clientY - drag.y;
         // Ignore finger tremor and taps; drag distance controls a gentle sway.
-        const deadZone = (value: number) => Math.sign(value) * Math.max(0, Math.abs(value) - 6);
-        targetInput.mouseX = THREE.MathUtils.clamp(deadZone(dx) / rect.width, -0.7, 0.7);
-        targetInput.mouseY = THREE.MathUtils.clamp(-deadZone(dy) / rect.height, -0.7, 0.7);
+        const deadZone = (value: number) => Math.sign(value) * Math.max(0, Math.abs(value) - 3);
+        targetInput.mouseX = THREE.MathUtils.clamp(deadZone(dx) / rect.width * 0.5, -0.4, 0.4);
+        targetInput.mouseY = THREE.MathUtils.clamp(-deadZone(dy) / rect.height * 0.5, -0.4, 0.4);
         return;
       }
       touchMode = false;
@@ -653,11 +653,12 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
       const now = performance.now();
       const delta = Math.min((now - previousFrameTime) / 1000, 0.05);
       previousFrameTime = now;
-      const smoothing = 1 - Math.exp(-(touchMode ? 7 : 12) * delta);
+      const response = touchMode ? (drag ? 5 : 3.5) : 12;
+      const smoothing = 1 - Math.exp(-response * delta);
       inputState.mouseX += (targetInput.mouseX - inputState.mouseX) * smoothing;
       inputState.mouseY += (targetInput.mouseY - inputState.mouseY) * smoothing;
-      const strengthX = touchMode ? Math.min(config.swayXStrength, 1.2) : config.swayXStrength;
-      const strengthY = touchMode ? Math.min(config.swayYStrength, 0.8) : config.swayYStrength;
+      const strengthX = touchMode ? Math.min(config.swayXStrength, 0.45) : config.swayXStrength;
+      const strengthY = touchMode ? Math.min(config.swayYStrength, 0.3) : config.swayYStrength;
       const swayX = reducedMotion.matches ? 0 : inputState.mouseX * strengthX;
       const swayY = config.lookAtY + (reducedMotion.matches ? 0 : inputState.mouseY * strengthY);
 
