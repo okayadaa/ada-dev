@@ -33,7 +33,6 @@ type ScreenConfig = {
   grassDepth: number;
   swayXStrength: number;
   swayYStrength: number;
-  inputDamping: number;
   sceneHeight: string;
 };
 
@@ -98,8 +97,7 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
 
     const targetInput: InputState = { mouseX: 0, mouseY: 0 };
     const touchDisplay = window.matchMedia("(pointer: coarse), (hover: none)");
-    let touchMode = touchDisplay.matches;
-    let drag: { id: number; x: number; y: number } | null = null;
+    let drag: { id: number; x: number; y: number; inputX: number; inputY: number } | null = null;
     let previousFrameTime = performance.now();
     const grassBlades: THREE.Mesh[] = [];
     const loader = new THREE.TextureLoader();
@@ -137,18 +135,18 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
         grassWidth: isMobile ? 74 : isTablet ? 77 : 80,
         grassDepth: isMobile ? 64 : isTablet ? 66 : 69,
 
-        // Keep navigation in view on narrow touch screens.
-        swayXStrength: isMobile ? 0.8 : isTablet ? 6.5 : 7,
-        swayYStrength: isMobile ? 0.6 : isTablet ? 4.7 : 5,
-        inputDamping: isMobile ? 1.35 : isTablet ? 1.1 : 1,
+        // Preserve the full garden exploration range on every screen.
+        swayXStrength: 7,
+        swayYStrength: 5,
 
         // Desktop unchanged
         sceneHeight: isMobile ? "100svh" : isTablet ? "100vh" : "100vh",
       };
     }
 
+    let config = getScreenConfig();
+
     function updateSceneHeight() {
-      const config = getScreenConfig();
       setSceneHeight(config.sceneHeight);
     }
 
@@ -159,8 +157,10 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
 
     function onPointerDown(e: PointerEvent) {
       if (e.pointerType === "mouse" || !e.isPrimary || isInteractiveTarget(e.target)) return;
-      touchMode = true;
-      drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
+      drag = {
+        id: e.pointerId, x: e.clientX, y: e.clientY,
+        inputX: targetInput.mouseX, inputY: targetInput.mouseY,
+      };
       containerNode.setPointerCapture(e.pointerId);
     }
 
@@ -175,21 +175,22 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
         if (!drag || drag.id !== e.pointerId) return;
         const dx = e.clientX - drag.x;
         const dy = e.clientY - drag.y;
-        // Ignore finger tremor and taps; drag distance controls a gentle sway.
+        // A half-screen drag reaches the same range as desktop pointer movement.
+        // Anchor each gesture to the last view so repeated drags remain continuous.
         const deadZone = (value: number) => Math.sign(value) * Math.max(0, Math.abs(value) - 5);
-        targetInput.mouseX = THREE.MathUtils.clamp(deadZone(dx) / 800, -0.12, 0.12);
-        targetInput.mouseY = THREE.MathUtils.clamp(-deadZone(dy) / 800, -0.12, 0.12);
+        targetInput.mouseX = THREE.MathUtils.clamp(drag.inputX + deadZone(dx) * 2 / rect.width, -1, 1);
+        targetInput.mouseY = THREE.MathUtils.clamp(drag.inputY - deadZone(dy) * 2 / rect.height, -1, 1);
         return;
       }
-      touchMode = false;
-      const config = getScreenConfig();
-      targetInput.mouseX = THREE.MathUtils.clamp((e.clientX - rect.left) / rect.width * 2 - 1, -1, 1) * config.inputDamping;
-      targetInput.mouseY = THREE.MathUtils.clamp(1 - (e.clientY - rect.top) / rect.height * 2, -1, 1) * config.inputDamping;
+      targetInput.mouseX = THREE.MathUtils.clamp((e.clientX - rect.left) / rect.width * 2 - 1, -1, 1);
+      targetInput.mouseY = THREE.MathUtils.clamp(1 - (e.clientY - rect.top) / rect.height * 2, -1, 1);
     }
 
     function resetInput(e: PointerEvent) {
       if (drag && e.pointerId !== drag.id) return;
       drag = null;
+      // Keep the explored view after lifting a finger (including capture loss).
+      if (e.pointerType !== "mouse" || touchDisplay.matches) return;
       targetInput.mouseX = 0;
       targetInput.mouseY = 0;
     }
@@ -635,7 +636,7 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
 
       const width = containerNode.clientWidth;
       const height = containerNode.clientHeight;
-      const config = getScreenConfig();
+      config = getScreenConfig();
 
       camera.aspect = width / height;
       camera.position.set(0, config.cameraY, config.cameraZ);
@@ -652,20 +653,15 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
     function animate() {
       raf = requestAnimationFrame(animate);
 
-      const config = getScreenConfig();
-
       const now = performance.now();
       const delta = Math.min((now - previousFrameTime) / 1000, 0.05);
       previousFrameTime = now;
-      const subtleInput = touchMode || touchDisplay.matches;
-      const response = subtleInput ? (drag ? 4 : 3) : 12;
-      const smoothing = 1 - Math.exp(-response * delta);
+      // Time-based damping gives touch and mouse the same response at any refresh rate.
+      const smoothing = 1 - Math.exp(-12 * delta);
       inputState.mouseX += (targetInput.mouseX - inputState.mouseX) * smoothing;
       inputState.mouseY += (targetInput.mouseY - inputState.mouseY) * smoothing;
-      const strengthX = subtleInput ? Math.min(config.swayXStrength, 0.2) : config.swayXStrength;
-      const strengthY = subtleInput ? Math.min(config.swayYStrength, 0.12) : config.swayYStrength;
-      const swayX = reducedMotion.matches ? 0 : inputState.mouseX * strengthX;
-      const swayY = config.lookAtY + (reducedMotion.matches ? 0 : inputState.mouseY * strengthY);
+      const swayX = reducedMotion.matches ? 0 : inputState.mouseX * config.swayXStrength;
+      const swayY = config.lookAtY + (reducedMotion.matches ? 0 : inputState.mouseY * config.swayYStrength);
 
       camera.position.set(0, config.cameraY, config.cameraZ);
       camera.lookAt(swayX, swayY, 0);
@@ -817,7 +813,7 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
         style={{
           position: "absolute",
           inset: 0,
-          touchAction: "none",
+          touchAction: "pinch-zoom",
         }}
       />
       <nav aria-label="Main navigation" style={{ position: "absolute", inset: 0, zIndex: 10, pointerEvents: "none" }}>
