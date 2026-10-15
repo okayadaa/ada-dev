@@ -96,7 +96,10 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
       return getCurrentHour();
     }
 
-    const mouse = new THREE.Vector2();
+    const targetInput: InputState = { mouseX: 0, mouseY: 0 };
+    let touchMode = false;
+    let drag: { id: number; x: number; y: number } | null = null;
+    let previousFrameTime = performance.now();
     const grassBlades: THREE.Mesh[] = [];
     const loader = new THREE.TextureLoader();
     const timer = new THREE.Timer();
@@ -149,35 +152,46 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
     }
 
 
-    function updatePointerCoords(e: { clientX: number; clientY: number }) {
-      const rect = containerNode.getBoundingClientRect();
-      const x = (e.clientX - rect.left) / rect.width;
-      const y = (e.clientY - rect.top) / rect.height;
-
-      mouse.x = x * 2 - 1;
-      mouse.y = -(y * 2 - 1);
-
-      return { x, y };
+    function isInteractiveTarget(target: EventTarget | null) {
+      return target instanceof Element && Boolean(target.closest("a, button, [role='dialog']"));
     }
 
-    function syncInputAndCamera(x: number, y: number) {
-      const config = getScreenConfig();
-      const boost = config.isMobile ? 1.35 : config.isTablet ? 1.1 : 1;
-
-      inputState.mouseX = (x - 0.5) * 2 * config.inputDamping * boost;
-      inputState.mouseY = (0.5 - y) * 2 * config.inputDamping * boost;
-
-      const swayX = inputState.mouseX * config.swayXStrength;
-      const swayY = config.lookAtY + inputState.mouseY * config.swayYStrength;
-
-      camera.position.set(0, config.cameraY, config.cameraZ);
-      camera.lookAt(swayX, swayY, 0);
-      camera.updateMatrixWorld();
+    function onPointerDown(e: PointerEvent) {
+      if (e.pointerType === "mouse" || !e.isPrimary || isInteractiveTarget(e.target)) return;
+      touchMode = true;
+      drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
+      containerNode.setPointerCapture(e.pointerId);
     }
 
     function onPointerMove(e: PointerEvent) {
-      const { x, y } = updatePointerCoords(e);
-      syncInputAndCamera(x, y);
+      if (!e.isPrimary || isInteractiveTarget(e.target)) return;
+      const rect = containerNode.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      if (e.pointerType !== "mouse") {
+        if (!drag || drag.id !== e.pointerId) return;
+        const dx = e.clientX - drag.x;
+        const dy = e.clientY - drag.y;
+        // Ignore finger tremor and taps; drag distance controls a gentle sway.
+        const deadZone = (value: number) => Math.sign(value) * Math.max(0, Math.abs(value) - 6);
+        targetInput.mouseX = THREE.MathUtils.clamp(deadZone(dx) / rect.width, -0.7, 0.7);
+        targetInput.mouseY = THREE.MathUtils.clamp(-deadZone(dy) / rect.height, -0.7, 0.7);
+        return;
+      }
+      touchMode = false;
+      const config = getScreenConfig();
+      targetInput.mouseX = THREE.MathUtils.clamp((e.clientX - rect.left) / rect.width * 2 - 1, -1, 1) * config.inputDamping;
+      targetInput.mouseY = THREE.MathUtils.clamp(1 - (e.clientY - rect.top) / rect.height * 2, -1, 1) * config.inputDamping;
+    }
+
+    function resetInput(e: PointerEvent) {
+      if (drag && e.pointerId !== drag.id) return;
+      drag = null;
+      targetInput.mouseX = 0;
+      targetInput.mouseY = 0;
+    }
+
+    function onPointerLeave(e: PointerEvent) {
+      if (!drag) resetInput(e);
     }
 
     function updateLogoOverlays() {
@@ -604,7 +618,12 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
         }
       });
 
+      containerNode.addEventListener("pointerdown", onPointerDown);
       containerNode.addEventListener("pointermove", onPointerMove);
+      containerNode.addEventListener("pointerup", resetInput);
+      containerNode.addEventListener("pointercancel", resetInput);
+      containerNode.addEventListener("lostpointercapture", resetInput);
+      containerNode.addEventListener("pointerleave", onPointerLeave);
     }
 
     function onResize() {
@@ -631,8 +650,16 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
 
       const config = getScreenConfig();
 
-      const swayX = inputState.mouseX * config.swayXStrength;
-      const swayY = config.lookAtY + inputState.mouseY * config.swayYStrength;
+      const now = performance.now();
+      const delta = Math.min((now - previousFrameTime) / 1000, 0.05);
+      previousFrameTime = now;
+      const smoothing = 1 - Math.exp(-(touchMode ? 7 : 12) * delta);
+      inputState.mouseX += (targetInput.mouseX - inputState.mouseX) * smoothing;
+      inputState.mouseY += (targetInput.mouseY - inputState.mouseY) * smoothing;
+      const strengthX = touchMode ? Math.min(config.swayXStrength, 1.2) : config.swayXStrength;
+      const strengthY = touchMode ? Math.min(config.swayYStrength, 0.8) : config.swayYStrength;
+      const swayX = reducedMotion.matches ? 0 : inputState.mouseX * strengthX;
+      const swayY = config.lookAtY + (reducedMotion.matches ? 0 : inputState.mouseY * strengthY);
 
       camera.position.set(0, config.cameraY, config.cameraZ);
       camera.lookAt(swayX, swayY, 0);
@@ -738,7 +765,12 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
       cancelAnimationFrame(raf);
 
       window.removeEventListener("resize", onResize);
+      containerNode.removeEventListener("pointerdown", onPointerDown);
       containerNode.removeEventListener("pointermove", onPointerMove);
+      containerNode.removeEventListener("pointerup", resetInput);
+      containerNode.removeEventListener("pointercancel", resetInput);
+      containerNode.removeEventListener("lostpointercapture", resetInput);
+      containerNode.removeEventListener("pointerleave", onPointerLeave);
 
       if (renderer) {
         renderer.dispose();
@@ -779,6 +811,7 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
         style={{
           position: "absolute",
           inset: 0,
+          touchAction: "none",
         }}
       />
       <nav aria-label="Main navigation" style={{ position: "absolute", inset: 0, zIndex: 10, pointerEvents: "none" }}>
