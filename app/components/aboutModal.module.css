@@ -26,7 +26,7 @@
   position: relative;
   width: min(50rem, 100%);
   min-height: min(28rem, calc(100svh - 4rem));
-  max-height: min(30rem, 100%);
+  max-height: min(42rem, 100%);
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -56,6 +56,7 @@
   padding: 3.25rem 2rem 1.5rem;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 8rem;
+  grid-template-areas: "writing doodles";
   gap: 2rem;
   background-color: var(--paper-color);
   background-image:
@@ -78,6 +79,11 @@
   font-size: 1.25rem;
   line-height: var(--line-height);
   opacity: 0.9;
+}
+
+.writing {
+  grid-area: writing;
+  min-width: 0;
 }
 
 .close {
@@ -152,6 +158,7 @@
 }
 
 .doodles {
+  grid-area: doodles;
   display: flex;
   flex-direction: column;
   justify-content: space-around;
@@ -178,14 +185,20 @@
 }
 
 @media (max-width: 640px) {
-  .page { grid-template-columns: minmax(0, 1fr); gap: 1.5rem; }
+  .page {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "writing" "doodles";
+    gap: 1.5rem;
+  }
   .doodles { flex-direction: row; gap: 0.75rem; }
   .sketch { flex: 1; min-width: 0; font-size: 0.9rem; }
+  .projectLink { font-size: 1.05rem; }
 }
 
 .projects {
-  margin-top: 1.5rem;
-  padding-top: 0.5rem;
+  min-width: 0;
+  margin: 1rem 0 0;
+  padding-top: 1rem;
   border-top: 1px dashed rgba(91, 125, 101, 0.4);
 }
 
@@ -193,6 +206,22 @@
   margin: 0;
   font-size: 1.35rem;
   font-weight: 600;
+  line-height: var(--line-height);
+}
+
+.projectList {
+  margin: 0;
+  padding: 0 0 0 1.35rem;
+  list-style: disc;
+}
+
+.projectList li {
+  min-width: 0;
+  line-height: var(--line-height);
+}
+
+.projectList li::marker {
+  color: #3e5c3e;
 }
 
 .projectLink {

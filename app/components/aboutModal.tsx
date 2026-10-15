@@ -74,22 +74,28 @@ My experience spans both frontend and backend development, and I'm always lookin
           </p>
           <section className={styles.projects} aria-labelledby="side-projects-title">
             <h3 id="side-projects-title" className={styles.projectsTitle}>Side projects</h3>
-            <a
-              className={styles.projectLink}
-              href="https://www.chaicoffeelit.org/"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              https://www.chaicoffeelit.org/
-            </a>
-            <a
-              className={styles.projectLink}
-              href="https://pawscare-plus.streamlit.app/"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              https://pawscare-plus.streamlit.app/
-            </a>
+            <ul className={styles.projectList}>
+              <li>
+                <a
+                  className={styles.projectLink}
+                  href="https://www.chaicoffeelit.org/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  https://www.chaicoffeelit.org/
+                </a>
+              </li>
+              <li>
+                <a
+                  className={styles.projectLink}
+                  href="https://pawscare-plus.streamlit.app/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  https://pawscare-plus.streamlit.app/
+                </a>
+              </li>
+            </ul>
           </section>
           </div>
           <aside className={styles.doodles} aria-hidden="true">
