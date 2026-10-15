@@ -97,7 +97,8 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
     }
 
     const targetInput: InputState = { mouseX: 0, mouseY: 0 };
-    let touchMode = false;
+    const touchDisplay = window.matchMedia("(pointer: coarse), (hover: none)");
+    let touchMode = touchDisplay.matches;
     let drag: { id: number; x: number; y: number } | null = null;
     let previousFrameTime = performance.now();
     const grassBlades: THREE.Mesh[] = [];
@@ -165,6 +166,9 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
 
     function onPointerMove(e: PointerEvent) {
       if (!e.isPrimary || isInteractiveTarget(e.target)) return;
+      // Mobile browsers can emit compatibility mouse events after a touch.
+      // Never let those switch a touch display to the desktop camera range.
+      if (e.pointerType === "mouse" && touchDisplay.matches) return;
       const rect = containerNode.getBoundingClientRect();
       if (!rect.width || !rect.height) return;
       if (e.pointerType !== "mouse") {
@@ -172,9 +176,9 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
         const dx = e.clientX - drag.x;
         const dy = e.clientY - drag.y;
         // Ignore finger tremor and taps; drag distance controls a gentle sway.
-        const deadZone = (value: number) => Math.sign(value) * Math.max(0, Math.abs(value) - 3);
-        targetInput.mouseX = THREE.MathUtils.clamp(deadZone(dx) / rect.width * 0.5, -0.4, 0.4);
-        targetInput.mouseY = THREE.MathUtils.clamp(-deadZone(dy) / rect.height * 0.5, -0.4, 0.4);
+        const deadZone = (value: number) => Math.sign(value) * Math.max(0, Math.abs(value) - 5);
+        targetInput.mouseX = THREE.MathUtils.clamp(deadZone(dx) / 800, -0.12, 0.12);
+        targetInput.mouseY = THREE.MathUtils.clamp(-deadZone(dy) / 800, -0.12, 0.12);
         return;
       }
       touchMode = false;
@@ -653,12 +657,13 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
       const now = performance.now();
       const delta = Math.min((now - previousFrameTime) / 1000, 0.05);
       previousFrameTime = now;
-      const response = touchMode ? (drag ? 5 : 3.5) : 12;
+      const subtleInput = touchMode || touchDisplay.matches;
+      const response = subtleInput ? (drag ? 4 : 3) : 12;
       const smoothing = 1 - Math.exp(-response * delta);
       inputState.mouseX += (targetInput.mouseX - inputState.mouseX) * smoothing;
       inputState.mouseY += (targetInput.mouseY - inputState.mouseY) * smoothing;
-      const strengthX = touchMode ? Math.min(config.swayXStrength, 0.45) : config.swayXStrength;
-      const strengthY = touchMode ? Math.min(config.swayYStrength, 0.3) : config.swayYStrength;
+      const strengthX = subtleInput ? Math.min(config.swayXStrength, 0.2) : config.swayXStrength;
+      const strengthY = subtleInput ? Math.min(config.swayYStrength, 0.12) : config.swayYStrength;
       const swayX = reducedMotion.matches ? 0 : inputState.mouseX * strengthX;
       const swayY = config.lookAtY + (reducedMotion.matches ? 0 : inputState.mouseY * strengthY);
 
