@@ -7,6 +7,9 @@
   justify-content: center;
   background: rgba(8, 10, 20, 0.45);
   backdrop-filter: blur(2px);
+  box-sizing: border-box;
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  touch-action: pan-y;
   animation: fadeIn 180ms ease-out;
 }
 
@@ -21,9 +24,9 @@
   --line-height: 32px;
 
   position: relative;
-  width: min(50rem, calc(100vw - 2rem));
+  width: min(50rem, 100%);
   min-height: min(28rem, calc(100svh - 4rem));
-  max-height: min(30rem, calc(100svh - 4rem));
+  max-height: min(30rem, 100%);
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -50,7 +53,7 @@
   width: 100%;
   box-sizing: border-box;
   overflow: auto;
-  padding: 2rem 2rem 1.5rem;
+  padding: 3.25rem 2rem 1.5rem;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 8rem;
   gap: 2rem;
@@ -82,8 +85,8 @@
   top: 0.35rem;
   right: 0.35rem;
   z-index: 1;
-  width: 1.75rem;
-  height: 1.75rem;
+  width: 2.75rem;
+  height: 2.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -144,7 +147,7 @@
 
 @media (max-width: 480px) {
   .page {
-    padding: 2rem 1.25rem 1.25rem;
+    padding: 3.25rem 1.25rem 1.25rem;
   }
 }
 
@@ -181,9 +184,6 @@
 }
 
 .projects {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
   margin-top: 1.5rem;
   padding-top: 0.5rem;
   border-top: 1px dashed rgba(91, 125, 101, 0.4);
@@ -208,4 +208,8 @@
   outline: 2px solid #62705b;
   outline-offset: 4px;
   border-radius: 2px;
+}
+
+@media (max-height: 500px) {
+  .card { min-height: 0; }
 }

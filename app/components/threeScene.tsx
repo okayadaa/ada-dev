@@ -48,7 +48,6 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
   const bloomRef = useRef(bloom);
   const mountRef = useRef<HTMLDivElement | null>(null);
   const linkRefs = useRef<Partial<Record<SiteLinkKey, HTMLAnchorElement | null>>>({});
-  const logosRef = useRef<THREE.Mesh[]>([]);
   const [sceneHeight, setSceneHeight] = useState("100vh");
   const [aboutOpen, setAboutOpen] = useState(false);
 
@@ -61,11 +60,6 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
   }, [bloom]);
 
   const logoKeys: SiteLinkKey[] = ["github", "linkedin", "about"];
-
-  function setLogoHovered(key: SiteLinkKey, hovered: boolean) {
-    const logo = logosRef.current.find((mesh) => mesh.userData.name === key);
-    if (logo) logo.userData.hovered = hovered;
-  }
 
   useEffect(() => {
     const container = containerRef.current;
@@ -81,9 +75,10 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
     let renderer!: THREE.WebGLRenderer;
 
     let flowers: THREE.Group[] = [];
-    let clouds: THREE.Mesh[] = [];
+    const clouds: THREE.Mesh[] = [];
     let stars: THREE.Points | null = null;
     let logos: THREE.Mesh[] = [];
+    const projected = new THREE.Vector3();
 
     let ambient!: THREE.AmbientLight;
     let dirLight!: THREE.DirectionalLight;
@@ -102,7 +97,6 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
     }
 
     const mouse = new THREE.Vector2();
-    const projected = new THREE.Vector3();
     const grassBlades: THREE.Mesh[] = [];
     const loader = new THREE.TextureLoader();
     const timer = new THREE.Timer();
@@ -114,7 +108,7 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
     const blooms: {
       disk: THREE.Mesh;
       delay: number;
-      petals: { mesh: THREE.Mesh; openRotation: number; openZ: number }[];
+      petals: { mesh: THREE.Mesh; scale: number; openRotation: number; openZ: number }[];
     }[] = [];
 
     function getScreenConfig(): ScreenConfig {
@@ -187,31 +181,34 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
     }
 
     function updateLogoOverlays() {
-      if (!logos.length) return;
-
-      scene.updateMatrixWorld(true);
-      camera.updateMatrixWorld(true);
-
+      camera.updateMatrixWorld();
       const width = containerNode.clientWidth;
       const height = containerNode.clientHeight;
-
-      logos.forEach((logo) => {
-        const key = logo.userData.name as SiteLinkKey;
-        const anchor = linkRefs.current[key];
-        if (!anchor) return;
-
+      for (const logo of logos) {
+        const anchor = linkRefs.current[logo.userData.name as SiteLinkKey];
+        if (!anchor) continue;
         logo.getWorldPosition(projected);
         projected.project(camera);
-
-        const x = (projected.x * 0.5 + 0.5) * width;
-        const y = (-projected.y * 0.5 + 0.5) * height;
         const size = getLogoScreenSize(logo, camera, height);
-
-        anchor.style.visibility = "visible";
-        anchor.style.left = `${x}px`;
-        anchor.style.top = `${y}px`;
+        anchor.style.left = `${(projected.x * 0.5 + 0.5) * width}px`;
+        anchor.style.top = `${(-projected.y * 0.5 + 0.5) * height}px`;
         anchor.style.width = `${size}px`;
         anchor.style.height = `${size}px`;
+        anchor.style.visibility = "visible";
+      }
+    }
+
+    function positionNavigation() {
+      // Lay out once at the resting viewpoint. Pointer movement changes only
+      // the camera, just as it does for the stars; icons stay at world positions.
+      const config = getScreenConfig();
+      const restingCamera = camera.clone();
+      restingCamera.position.set(0, config.cameraY, config.cameraZ);
+      restingCamera.lookAt(0, config.lookAtY, 0);
+      restingCamera.updateMatrixWorld();
+      animateLogos(logos, restingCamera, {
+        width: containerNode.clientWidth,
+        height: containerNode.clientHeight,
       });
     }
 
@@ -247,30 +244,42 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
       return leaf;
     }
 
-    function createPetal(color = 0xffe066, emissive = 0xffe066, scale = 1) {
-      const geometry = new THREE.PlaneGeometry(1, 1, 6, 12);
-      const positions = geometry.attributes.position;
-      for (let i = 0; i < positions.count; i++) {
-        const t = positions.getY(i) + 0.5;
-        const across = positions.getX(i) * 2;
-        const width = Math.pow(Math.sin(Math.PI * t), 0.75) * 0.14 * scale;
-        positions.setXYZ(i,
-          across * width,
-          t * 0.88 * scale,
-          (0.10 * Math.sin(t * Math.PI) + 0.09 * t * t + across * across * 0.035) * scale,
-        );
-      }
-      geometry.computeVertexNormals();
-      const material = new THREE.MeshStandardMaterial({
-        color,
-        emissive,
-        emissiveIntensity: 0.025,
-        roughness: 0.8,
-        metalness: 0,
-        side: THREE.DoubleSide,
-      });
+    let petalGeometry: THREE.PlaneGeometry | undefined;
+    const petalMaterials = new Map<string, THREE.MeshStandardMaterial>();
 
-      const petal = new THREE.Mesh(geometry, material);
+    function createPetal(color = 0xffe066, emissive = 0xffe066, scale = 1) {
+      // All petals have the same shape; preserve size variation with transforms.
+      if (!petalGeometry) {
+        petalGeometry = new THREE.PlaneGeometry(1, 1, 6, 12);
+        const positions = petalGeometry.attributes.position;
+        for (let i = 0; i < positions.count; i++) {
+          const t = positions.getY(i) + 0.5;
+          const across = positions.getX(i) * 2;
+          const width = Math.pow(Math.sin(Math.PI * t), 0.75) * 0.14;
+          positions.setXYZ(i,
+            across * width,
+            t * 0.88,
+            0.10 * Math.sin(t * Math.PI) + 0.09 * t * t + across * across * 0.035,
+          );
+        }
+        petalGeometry.computeVertexNormals();
+      }
+      const materialKey = `${color}:${emissive}`;
+      let material = petalMaterials.get(materialKey);
+      if (!material) {
+        material = new THREE.MeshStandardMaterial({
+          color,
+          emissive,
+          emissiveIntensity: 0.025,
+          roughness: 0.8,
+          metalness: 0,
+          side: THREE.DoubleSide,
+        });
+        petalMaterials.set(materialKey, material);
+      }
+
+      const petal = new THREE.Mesh(petalGeometry, material);
+      petal.scale.setScalar(scale);
       petal.castShadow = true;
       return petal;
     }
@@ -360,7 +369,7 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
         disk,
         // Roll the bloom from left to right across the field.
         delay: THREE.MathUtils.clamp((position.x + 25) / 50, 0, 1) * 1.4,
-        petals: [] as { mesh: THREE.Mesh; openRotation: number; openZ: number }[],
+        petals: [] as { mesh: THREE.Mesh; scale: number; openRotation: number; openZ: number }[],
       };
       disk.scale.setScalar(0.45);
       blooms.push(flowerBloom);
@@ -386,12 +395,13 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
         petal.position.set(0, 0, 0.27 * scale + Math.random() * 0.035);
         flowerBloom.petals.push({
           mesh: petal,
+          scale: petal.scale.x,
           openRotation: petal.rotation.x,
           openZ: petal.position.z,
         });
         petal.rotation.x = 0.12;
         petal.position.z *= 0.25;
-        petal.scale.set(0.65, 0.35, 0.65);
+        petal.scale.multiply(new THREE.Vector3(0.65, 0.35, 0.65));
         holder.add(petal);
         holder.rotation.y = angle;
         head.add(holder);
@@ -537,7 +547,7 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
 
       stars = createStars(scene, config.starCount);
       logos = createLogos(scene);
-      logosRef.current = logos;
+      positionNavigation();
 
       const rand = mulberry32(12345);
       flowers = [];
@@ -608,6 +618,7 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
       camera.position.set(0, config.cameraY, config.cameraZ);
       camera.lookAt(0, config.lookAtY, 0);
       camera.updateProjectionMatrix();
+      positionNavigation();
 
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       renderer.setSize(width, height);
@@ -644,9 +655,9 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
             petal.mesh.rotation.x = THREE.MathUtils.lerp(0.12, petal.openRotation, eased);
             petal.mesh.position.z = THREE.MathUtils.lerp(petal.openZ * 0.25, petal.openZ, eased);
             petal.mesh.scale.set(
-              THREE.MathUtils.lerp(0.65, 1, eased),
-              THREE.MathUtils.lerp(0.35, 1, eased),
-              THREE.MathUtils.lerp(0.65, 1, eased),
+              petal.scale * THREE.MathUtils.lerp(0.65, 1, eased),
+              petal.scale * THREE.MathUtils.lerp(0.35, 1, eased),
+              petal.scale * THREE.MathUtils.lerp(0.65, 1, eased),
             );
           }
           if (progress < 1) complete = false;
@@ -669,8 +680,6 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
       }
 
       if (stars) animateStars(stars, timer);
-      if (logos.length) animateLogos(logos, camera, timer);
-
       // --- Breeze controls (tweak these to taste) ---
       const BREEZE_SPEED = 1.0; // how fast the flowers sway back and forth
       const BREEZE_TRAVEL = 0.5; // speed of gusts rolling across the field
@@ -680,7 +689,7 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
       // Gusts: a slow swell so the wind ebbs, then surges
       const gust = 0.55 + 0.45 * Math.sin(time * 0.25);
 
-      flowers.forEach((flower: any) => {
+      flowers.forEach((flower) => {
         const d = flower.userData;
 
         // Two offset waves give an organic, non-repeating sway, plus a quick
@@ -710,8 +719,8 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
         blade.rotation.z = blade.userData.lean + wind * 0.35;
       });
 
-      updateLogoOverlays();
 
+      updateLogoOverlays();
       renderer.render(scene, camera);
 
       if (!firstFrameDone) {
@@ -730,7 +739,6 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
 
       window.removeEventListener("resize", onResize);
       containerNode.removeEventListener("pointermove", onPointerMove);
-      logosRef.current = [];
 
       if (renderer) {
         renderer.dispose();
@@ -740,17 +748,18 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
         }
       }
 
-      scene?.traverse((obj: any) => {
-        if (obj?.isMesh) {
-          obj.geometry?.dispose?.();
-
-          if (Array.isArray(obj.material)) {
-            obj.material.forEach((m: any) => m?.dispose?.());
-          } else {
-            obj.material?.dispose?.();
-          }
+      const geometries = new Set<THREE.BufferGeometry>();
+      const materials = new Set<THREE.Material>();
+      scene?.traverse((obj) => {
+        if (obj instanceof THREE.Mesh || obj instanceof THREE.Points) {
+          geometries.add(obj.geometry);
+          const meshMaterials = Array.isArray(obj.material) ? obj.material : [obj.material];
+          meshMaterials.forEach((material) => materials.add(material));
+          if (obj instanceof THREE.InstancedMesh) obj.dispose();
         }
       });
+      geometries.forEach((geometry) => geometry.dispose());
+      materials.forEach((material) => material.dispose());
     };
   }, []);
 
@@ -762,7 +771,7 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
         width: "100%",
         height: sceneHeight,
         minHeight: "100svh",
-        touchAction: "none",
+        touchAction: "manipulation",
       }}
     >
       <div
@@ -772,48 +781,29 @@ export default function ThreeScene({ onReady, bloom = true }: ThreeSceneProps = 
           inset: 0,
         }}
       />
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          zIndex: 10,
-          pointerEvents: "none",
-        }}
-      >
+      <nav aria-label="Main navigation" style={{ position: "absolute", inset: 0, zIndex: 10, pointerEvents: "none" }}>
         {logoKeys.map((key) => {
           const link = SITE_LINKS[key];
           const isModal = link.type === "modal";
-          const linkStyle: React.CSSProperties = {
-            position: "absolute",
-            pointerEvents: "auto",
-            cursor: "pointer",
-            transform: "translate(-50%, -50%)",
-            touchAction: "manipulation",
-          };
-
           return (
             <a
               key={key}
-              ref={(el) => {
-                linkRefs.current[key] = el;
-              }}
+              ref={(node) => { linkRefs.current[key] = node; }}
+              style={{ position: "absolute", visibility: "hidden", pointerEvents: "auto", transform: "translate(-50%, -50%)", touchAction: "manipulation" }}
               href={link.type === "modal" ? "#" : link.url}
               target={link.type === "external" ? "_blank" : undefined}
               rel={link.type === "external" ? "noopener noreferrer" : undefined}
-              aria-label={key}
-              style={linkStyle}
+              aria-label={key === "about" ? "About me" : key === "github" ? "GitHub" : "LinkedIn"}
               onClick={(e) => {
                 if (isModal) {
                   e.preventDefault();
                   setAboutOpen(true);
                 }
               }}
-              onMouseEnter={() => setLogoHovered(key, true)}
-              onMouseLeave={() => setLogoHovered(key, false)}
             />
           );
         })}
-      </div>
+      </nav>
       <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} />
     </div>
   );

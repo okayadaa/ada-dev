@@ -2,77 +2,80 @@
   position: fixed;
   inset: 0;
   z-index: 50;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #fffdf8 0%, #f6ecd6 55%, #ecdcbb 100%);
-  opacity: 1;
+  overflow: hidden;
   pointer-events: auto;
-  transition: opacity 600ms ease;
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
+  /* A soft peripheral shadow gives the opening a first-person feel. */
+  background: radial-gradient(ellipse at center, transparent 48%, rgba(24, 15, 18, 0.4) 100%);
 }
 
-.overlayHidden {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.sunflower {
-  position: relative;
-  width: 200px;
-  height: 200px;
-}
-
-.petal {
+.eyelid {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 24px;
-  height: 64px;
-  margin: -64px 0 0 -12px;
-  transform-origin: 50% 100%;
-  border-radius: 50% 50% 45% 45% / 70% 70% 30% 30%;
-  background: linear-gradient(180deg, #ffe98a 0%, #ffd23f 60%, #f2b705 100%);
-  transform: rotate(var(--a)) scaleY(0);
-  opacity: 0;
-  animation: petalPull 2.8s ease-in-out infinite;
-  animation-delay: var(--delay);
+  left: -10%;
+  width: 120%;
+  background: linear-gradient(to bottom, #080709 75%, #1d1317);
+  box-shadow: 0 0 14px 7px rgba(24, 14, 19, 0.85);
+  will-change: transform;
 }
 
-.center {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 70px;
-  height: 70px;
-  margin: -35px 0 0 -35px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 50% 38%, #6b4a1b 0%, #3d2606 72%);
-  box-shadow: inset 0 0 0 4px #5a3a12, 0 1px 6px rgba(0, 0, 0, 0.2);
+.upper {
+  top: -8%;
+  height: 78%;
+  border-radius: 0 0 50% 50% / 0 0 20% 20%;
 }
 
-@keyframes petalPull {
-  0% {
-    opacity: 0;
-    transform: rotate(var(--a)) translateY(8px) scaleY(0.15);
-  }
-  25% {
-    opacity: 1;
-    transform: rotate(var(--a)) translateY(0) scaleY(1);
-  }
-  75% {
-    opacity: 1;
-    transform: rotate(var(--a)) translateY(0) scaleY(1);
-  }
-  100% {
-    opacity: 0;
-    transform: rotate(var(--a)) translateY(8px) scaleY(0.15);
-  }
+.lower {
+  bottom: -8%;
+  height: 40%;
+  border-radius: 50% 50% 0 0 / 24% 24% 0 0;
+  background: linear-gradient(to top, #080709 75%, #1d1317);
+}
+
+.blinking {
+  animation: focus 3s linear forwards;
+}
+
+.blinking .upper {
+  animation: upperBlink 3s ease-in-out forwards;
+}
+
+.blinking .lower {
+  animation: lowerBlink 3s ease-in-out forwards;
+}
+
+/* The upper lid does most of the work: a quick closure, a short pause,
+   then a slower opening. The second blink is lighter and less regular. */
+@keyframes upperBlink {
+  0%, 4% { transform: translateY(0); }
+  18% { transform: translateY(-102%); }
+  32% { transform: translateY(-108%); animation-timing-function: cubic-bezier(0.6, 0, 0.9, 0.4); }
+  35%, 37% { transform: translateY(0); animation-timing-function: cubic-bezier(0.15, 0.6, 0.3, 1); }
+  46%, 66% { transform: translateY(-108%); }
+  69% { transform: translateY(-12%); }
+  71% { transform: translateY(-12%); animation-timing-function: cubic-bezier(0.15, 0.6, 0.3, 1); }
+  81%, 100% { transform: translateY(-120%); }
+}
+
+@keyframes lowerBlink {
+  0%, 4% { transform: translateY(0); }
+  20%, 32% { transform: translateY(112%); }
+  36%, 38% { transform: translateY(0); }
+  48%, 66% { transform: translateY(112%); }
+  70%, 72% { transform: translateY(25%); }
+  83%, 100% { transform: translateY(125%); }
+}
+
+@keyframes focus {
+  0% { backdrop-filter: blur(8px) brightness(0.7); -webkit-backdrop-filter: blur(8px) brightness(0.7); }
+  24% { backdrop-filter: blur(5px) brightness(1.08); -webkit-backdrop-filter: blur(5px) brightness(1.08); }
+  45% { backdrop-filter: blur(3px) brightness(1); -webkit-backdrop-filter: blur(3px) brightness(1); }
+  68% { backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); opacity: 1; }
+  84% { backdrop-filter: blur(1px); -webkit-backdrop-filter: blur(1px); opacity: 1; }
+  100% { backdrop-filter: blur(0); -webkit-backdrop-filter: blur(0); opacity: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .petal {
-    animation: none;
-    opacity: 1;
-    transform: rotate(var(--a)) scaleY(1);
-  }
+  .eyelid { display: none; }
+  .blinking { animation-duration: 200ms; }
 }

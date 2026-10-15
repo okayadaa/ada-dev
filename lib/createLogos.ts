@@ -68,45 +68,80 @@ export function createLogos(scene: THREE.Scene): THREE.Mesh[] {
   return logos;
 }
 
+// Keep the navigation centered in the sky above the flower field on every screen.
+export function getCompactLogoLayout(width: number, height: number) {
+  const rowWidth = Math.min(360, Math.max(0, width - 48));
+  const cellWidth = rowWidth / 3;
+  return {
+    centers: [0, 1, 2].map((i) => width / 2 + (i - 1) * cellWidth),
+    y: Math.max(48, Math.min(height * 0.45, height - 48)),
+    size: Math.min(50, cellWidth / 1.5),
+    targetSize: Math.max(44, Math.min(80, cellWidth - 8)),
+  };
+}
+
 export function animateLogos(
   logos: THREE.Mesh[],
-  camera: THREE.Camera,
-  timer: THREE.Timer
+  camera: THREE.PerspectiveCamera,
+  viewport?: { width: number; height: number },
 ) {
-  const time = timer.getElapsed();
-  const wave = Math.sin(time * 1.5);
 
-  logos.forEach((logo) => {
+  const compact = viewport
+    ? getCompactLogoLayout(viewport.width, viewport.height)
+    : null;
+  const distance = 19;
+  const worldHeight = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * distance;
+  const position = new THREE.Vector3();
+  // Preserve the original desktop composition, using the resting camera as
+  // the reference instead of allowing pointer sway to move the navigation.
+  const restingCamera = new THREE.PerspectiveCamera(camera.fov, camera.aspect, camera.near, camera.far);
+  restingCamera.position.set(0, 8, 18);
+  restingCamera.lookAt(0, 6.5, 0);
+  restingCamera.updateMatrixWorld();
+
+  logos.forEach((logo, index) => {
     const glow = logo.userData.glow as THREE.Mesh;
     const hovered = logo.userData.hovered as boolean;
     const baseX = logo.userData.baseX as number;
     const baseY = logo.userData.baseY as number;
     const baseZ = logo.userData.baseZ as number;
 
-    logo.position.set(baseX, baseY, baseZ);
-    glow.position.set(baseX, baseY, baseZ - 0.01);
+    position.set(baseX, baseY, baseZ);
+    const restingDepth = -position.clone().applyMatrix4(restingCamera.matrixWorldInverse).z;
+    position.project(restingCamera);
+    let layoutScale = distance / restingDepth;
+    if (compact && viewport) {
+      position.set(
+        (compact.centers[index] / viewport.width) * 2 - 1,
+        1 - (compact.y / viewport.height) * 2,
+        0,
+      );
+      layoutScale = (compact.size / viewport.height) * worldHeight / LOGO_SIZE;
+    }
+    position.z = 0;
+    position.unproject(camera);
+    position.sub(camera.position).applyQuaternion(camera.quaternion.clone().invert());
+    position.multiplyScalar(distance / -position.z);
+    position.applyQuaternion(camera.quaternion).add(camera.position);
+    logo.position.copy(position);
+    glow.position.copy(position);
+    logo.quaternion.copy(camera.quaternion);
+    glow.quaternion.copy(camera.quaternion);
 
-    logo.lookAt(camera.position);
-    glow.lookAt(camera.position);
-
-    const logoZoom = hovered ? 1.12 + 0.10 * wave : 1.0 + 0.19 * wave;
-    logo.scale.set(logoZoom, logoZoom, 1);
+    const logoZoom = 1;
+    logo.scale.set(logoZoom * layoutScale, logoZoom * layoutScale, 1);
 
     const logoMaterial = logo.material as THREE.MeshBasicMaterial;
-    logoMaterial.opacity = hovered
-      ? 1.0
-      : THREE.MathUtils.clamp(0.9 + 0.06 * wave, 0.8, 1.0);
+    logoMaterial.opacity = hovered ? 1 : 0.95;
 
-    const brightness = hovered ? 1.18 : 1.0 + 0.04 * wave;
+    const brightness = hovered ? 1.18 : 1;
     logoMaterial.color.setRGB(brightness, brightness, brightness);
 
-    const glowZoom = hovered ? 1.28 + 0.14 * wave : 1.15 + 0.14 * wave;
-    glow.scale.set(glowZoom, glowZoom, 1);
+    const glowZoom = 1.15;
+    glow.scale.set(glowZoom * layoutScale, glowZoom * layoutScale, 1);
 
     const glowMaterial = glow.material as THREE.MeshBasicMaterial;
-    glowMaterial.opacity = hovered
-      ? THREE.MathUtils.clamp(0.3 + 0.07 * wave, 0.2, 0.4)
-      : THREE.MathUtils.clamp(0.16 + 0.05 * wave, 0.08, 0.24);
+    glowMaterial.opacity = hovered ? 0.3 : 0.18;
   });
 }
 
